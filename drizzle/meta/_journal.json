@@ -1,0 +1,20 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1769077848136,
+      "tag": "0000_high_wallow",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1769078074798,
+      "tag": "0001_dapper_plazm",
+      "breakpoints": true
+    }
+  ]
+}

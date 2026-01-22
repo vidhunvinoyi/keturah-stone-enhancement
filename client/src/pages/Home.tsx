@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
 import { Download, ExternalLink, Send, FolderOpen } from 'lucide-react';
+import VisualizeYourSpace from '@/components/VisualizeYourSpace';
 
 // Google Drive folder links
 const GOOGLE_DRIVE_LINKS = {
@@ -17,6 +18,7 @@ const GOOGLE_DRIVE_LINKS = {
 };
 
 export default function Home() {
+
   const [selectedMarble, setSelectedMarble] = useState<MarbleType>('bardiglio');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
@@ -332,6 +334,9 @@ export default function Home() {
           </div>
         </div>
       </section>
+
+      {/* Visualize Your Space Section */}
+      <VisualizeYourSpace />
 
       {/* Stats Section */}
       <section className="py-24 bg-foreground text-background">
