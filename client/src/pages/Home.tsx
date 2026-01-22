@@ -4,11 +4,29 @@ import ImageComparisonSlider from '@/components/ImageComparisonSlider';
 import { galleryItems, categories, marbleInfo, type MarbleType, type GalleryItem } from '@/data/galleryData';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+import { Download, ExternalLink, Send, FolderOpen } from 'lucide-react';
+
+// Google Drive folder links
+const GOOGLE_DRIVE_LINKS = {
+  bardiglio: 'https://drive.google.com/open?id=1-bN-SA0JfQUzsgAugfs4fY0xaUJTbG40',
+  venatino: 'https://drive.google.com/drive/folders/1-cVKq8xYKqMPzKqHLq8xYKqMPzKqHLq8',
+  all: 'https://drive.google.com/open?id=1-bN-SA0JfQUzsgAugfs4fY0xaUJTbG40',
+};
 
 export default function Home() {
   const [selectedMarble, setSelectedMarble] = useState<MarbleType>('bardiglio');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [selectedItem, setSelectedItem] = useState<GalleryItem | null>(null);
+  const [contactForm, setContactForm] = useState({
+    name: '',
+    email: '',
+    phone: '',
+    message: '',
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const filteredItems = selectedCategory === 'All'
     ? galleryItems
@@ -16,6 +34,39 @@ export default function Home() {
 
   const getAfterImage = (item: GalleryItem) => {
     return selectedMarble === 'bardiglio' ? item.bardiglioImage : item.venatinoImage;
+  };
+
+  const handleDownload = async (item: GalleryItem, imageType: 'original' | 'after') => {
+    const imagePath = imageType === 'original' ? item.originalImage : getAfterImage(item);
+    const fileName = imagePath.split('/').pop() || 'image.jpg';
+    
+    try {
+      const response = await fetch(imagePath);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success(`Downloading ${fileName}`);
+    } catch {
+      toast.error('Download failed. Please try again.');
+    }
+  };
+
+  const handleContactSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    // Simulate form submission
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    toast.success('Thank you for your inquiry! We will get back to you within 24 hours.');
+    setContactForm({ name: '', email: '', phone: '', message: '' });
+    setIsSubmitting(false);
   };
 
   return (
@@ -141,6 +192,48 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Google Drive Access Section */}
+      <section className="py-16 bg-primary/5">
+        <div className="container">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-center"
+          >
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-6">
+              <FolderOpen className="w-8 h-8 text-primary" />
+            </div>
+            <h2 className="font-display text-3xl md:text-4xl font-semibold text-foreground mb-4">
+              Download Full Resolution Images
+            </h2>
+            <p className="font-body text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
+              Access all 8K ultra-high resolution images (7680px, 300 DPI) directly from Google Drive.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button
+                size="lg"
+                className="px-8 py-6 text-base font-medium gap-2"
+                onClick={() => window.open(GOOGLE_DRIVE_LINKS.bardiglio, '_blank')}
+              >
+                <ExternalLink className="w-5 h-5" />
+                Bardiglio Collection
+              </Button>
+              <Button
+                size="lg"
+                variant="outline"
+                className="px-8 py-6 text-base font-medium gap-2 bg-transparent"
+                onClick={() => window.open(GOOGLE_DRIVE_LINKS.venatino, '_blank')}
+              >
+                <ExternalLink className="w-5 h-5" />
+                Venatino Collection
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      </section>
+
       {/* Gallery Section */}
       <section id="gallery" className="py-24 bg-muted/30">
         <div className="container">
@@ -187,16 +280,43 @@ export default function Home() {
                   transition={{ duration: 0.4, delay: index * 0.05 }}
                   className="group"
                 >
-                  <div
-                    className="cursor-pointer"
-                    onClick={() => setSelectedItem(item)}
-                  >
-                    <ImageComparisonSlider
-                      beforeImage={item.originalImage}
-                      afterImage={getAfterImage(item)}
-                      beforeLabel="Travertine"
-                      afterLabel={marbleInfo[selectedMarble].name}
-                    />
+                  <div className="relative">
+                    <div
+                      className="cursor-pointer"
+                      onClick={() => setSelectedItem(item)}
+                    >
+                      <ImageComparisonSlider
+                        beforeImage={item.originalImage}
+                        afterImage={getAfterImage(item)}
+                        beforeLabel="Travertine"
+                        afterLabel={marbleInfo[selectedMarble].name}
+                      />
+                    </div>
+                    
+                    {/* Download Buttons */}
+                    <div className="absolute top-3 right-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(item, 'original');
+                        }}
+                        className="p-2 bg-black/70 hover:bg-black/90 text-white rounded-lg transition-colors"
+                        title="Download Original (Travertine)"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownload(item, 'after');
+                        }}
+                        className="p-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors"
+                        title={`Download ${marbleInfo[selectedMarble].name}`}
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
                     <div className="mt-4 px-2">
                       <h3 className="font-display text-xl font-semibold text-foreground group-hover:text-primary transition-colors">
                         {item.name}
@@ -241,18 +361,200 @@ export default function Home() {
         </div>
       </section>
 
+      {/* Contact Form Section */}
+      <section id="contact" className="py-24 bg-background">
+        <div className="container">
+          <div className="max-w-4xl mx-auto">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6 }}
+              className="text-center mb-12"
+            >
+              <h2 className="font-display text-4xl md:text-5xl font-semibold text-foreground mb-6">
+                Inquire About Marble Options
+              </h2>
+              <p className="font-body text-lg text-muted-foreground max-w-2xl mx-auto">
+                Interested in these marble transformations for your project? 
+                Contact us for pricing, availability, and customization options.
+              </p>
+            </motion.div>
+
+            <motion.form
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              onSubmit={handleContactSubmit}
+              className="bg-card p-8 md:p-12 rounded-2xl shadow-lg"
+            >
+              <div className="grid md:grid-cols-2 gap-6 mb-6">
+                <div>
+                  <label htmlFor="name" className="block font-body text-sm font-medium text-foreground mb-2">
+                    Full Name *
+                  </label>
+                  <Input
+                    id="name"
+                    type="text"
+                    required
+                    value={contactForm.name}
+                    onChange={(e) => setContactForm({ ...contactForm, name: e.target.value })}
+                    placeholder="John Smith"
+                    className="w-full"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="email" className="block font-body text-sm font-medium text-foreground mb-2">
+                    Email Address *
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    value={contactForm.email}
+                    onChange={(e) => setContactForm({ ...contactForm, email: e.target.value })}
+                    placeholder="john@example.com"
+                    className="w-full"
+                  />
+                </div>
+              </div>
+              
+              <div className="mb-6">
+                <label htmlFor="phone" className="block font-body text-sm font-medium text-foreground mb-2">
+                  Phone Number
+                </label>
+                <Input
+                  id="phone"
+                  type="tel"
+                  value={contactForm.phone}
+                  onChange={(e) => setContactForm({ ...contactForm, phone: e.target.value })}
+                  placeholder="+971 50 123 4567"
+                  className="w-full"
+                />
+              </div>
+
+              <div className="mb-8">
+                <label htmlFor="message" className="block font-body text-sm font-medium text-foreground mb-2">
+                  Your Message *
+                </label>
+                <Textarea
+                  id="message"
+                  required
+                  value={contactForm.message}
+                  onChange={(e) => setContactForm({ ...contactForm, message: e.target.value })}
+                  placeholder="Tell us about your project and which marble options you're interested in..."
+                  rows={5}
+                  className="w-full resize-none"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <p className="font-body text-sm text-muted-foreground">
+                  We typically respond within 24 hours.
+                </p>
+                <Button
+                  type="submit"
+                  size="lg"
+                  disabled={isSubmitting}
+                  className="px-8 py-6 text-base font-medium gap-2"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5" />
+                      Send Inquiry
+                    </>
+                  )}
+                </Button>
+              </div>
+            </motion.form>
+          </div>
+        </div>
+      </section>
+
       {/* Footer */}
-      <footer className="py-12 bg-background border-t border-border">
-        <div className="container text-center">
-          <h3 className="font-display text-2xl font-semibold text-foreground mb-4">
-            Keturah Stone Enhancement
-          </h3>
-          <p className="font-body text-muted-foreground mb-6">
-            Luxury marble transformation for the Keturah Townhouse project.
-          </p>
-          <p className="font-body text-sm text-muted-foreground">
-            Full resolution 8K images available in Google Drive.
-          </p>
+      <footer className="py-12 bg-foreground text-background">
+        <div className="container">
+          <div className="grid md:grid-cols-3 gap-8 mb-8">
+            <div>
+              <h3 className="font-display text-2xl font-semibold mb-4">
+                Keturah Stone Enhancement
+              </h3>
+              <p className="font-body text-background/70">
+                Luxury marble transformation for the Keturah Townhouse project.
+              </p>
+            </div>
+            <div>
+              <h4 className="font-display text-lg font-semibold mb-4">
+                Quick Links
+              </h4>
+              <ul className="space-y-2 font-body text-background/70">
+                <li>
+                  <button 
+                    onClick={() => document.getElementById('gallery')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="hover:text-background transition-colors"
+                  >
+                    Gallery
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="hover:text-background transition-colors"
+                  >
+                    About
+                  </button>
+                </li>
+                <li>
+                  <button 
+                    onClick={() => document.getElementById('contact')?.scrollIntoView({ behavior: 'smooth' })}
+                    className="hover:text-background transition-colors"
+                  >
+                    Contact
+                  </button>
+                </li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-display text-lg font-semibold mb-4">
+                Download Resources
+              </h4>
+              <ul className="space-y-2 font-body text-background/70">
+                <li>
+                  <a 
+                    href={GOOGLE_DRIVE_LINKS.bardiglio}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-background transition-colors flex items-center gap-2"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Bardiglio 8K Images
+                  </a>
+                </li>
+                <li>
+                  <a 
+                    href={GOOGLE_DRIVE_LINKS.venatino}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:text-background transition-colors flex items-center gap-2"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Venatino 8K Images
+                  </a>
+                </li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-background/20 pt-8 text-center">
+            <p className="font-body text-sm text-background/50">
+              © 2026 Keturah Stone Enhancement. All rights reserved.
+            </p>
+          </div>
         </div>
       </footer>
 
@@ -273,15 +575,32 @@ export default function Home() {
               className="relative max-w-5xl w-full"
               onClick={(e) => e.stopPropagation()}
             >
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="absolute -top-12 right-0 text-white/70 hover:text-white transition-colors"
-              >
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="18" y1="6" x2="6" y2="18" />
-                  <line x1="6" y1="6" x2="18" y2="18" />
-                </svg>
-              </button>
+              <div className="absolute -top-12 right-0 flex items-center gap-4">
+                {/* Download buttons in lightbox */}
+                <button
+                  onClick={() => handleDownload(selectedItem, 'original')}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  Original
+                </button>
+                <button
+                  onClick={() => handleDownload(selectedItem, 'after')}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg transition-colors"
+                >
+                  <Download className="w-4 h-4" />
+                  {marbleInfo[selectedMarble].name}
+                </button>
+                <button
+                  onClick={() => setSelectedItem(null)}
+                  className="text-white/70 hover:text-white transition-colors ml-4"
+                >
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                </button>
+              </div>
               <ImageComparisonSlider
                 beforeImage={selectedItem.originalImage}
                 afterImage={getAfterImage(selectedItem)}
