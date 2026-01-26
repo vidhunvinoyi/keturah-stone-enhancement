@@ -206,6 +206,15 @@ export async function updateCustomMarble(
   await db.update(customMarbles).set(data).where(eq(customMarbles.id, id));
 }
 
+export async function getAllCustomMarbles(): Promise<CustomMarble[]> {
+  const db = await getDb();
+  if (!db) {
+    return [];
+  }
+
+  return await db.select().from(customMarbles).orderBy(customMarbles.createdAt);
+}
+
 export async function deleteCustomMarble(id: number): Promise<void> {
   const db = await getDb();
   if (!db) {

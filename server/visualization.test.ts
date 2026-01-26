@@ -63,6 +63,20 @@ vi.mock("./db", () => ({
     createdAt: new Date(),
     updatedAt: new Date(),
   }),
+  getAllCustomMarbles: vi.fn().mockResolvedValue([
+    {
+      id: 1,
+      name: "Calacatta Gold",
+      origin: "Carrara, Italy",
+      imageUrl: "https://example.com/calacatta.jpg",
+      createdAt: new Date(),
+      marbleAnalysis: JSON.stringify({
+        baseColor: "White",
+        veiningColors: ["gold", "gray"],
+        veiningPattern: "Bold dramatic veining",
+      }),
+    },
+  ]),
   getCustomMarbles: vi.fn().mockResolvedValue([
     {
       id: 1,
@@ -73,6 +87,7 @@ vi.mock("./db", () => ({
     },
   ]),
   updateCustomMarble: vi.fn().mockResolvedValue(undefined),
+  deleteCustomMarble: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock the storage functions
@@ -678,7 +693,72 @@ describe("customMarble.get", () => {
   });
 });
 
-// Note: customMarble.list endpoint can be added if needed for listing all custom marbles
+describe("customMarble.list", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("retrieves all custom marbles", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.customMarble.list();
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toHaveProperty("name", "Calacatta Gold");
+    expect(result[0]).toHaveProperty("imageUrl");
+  });
+
+  it("returns empty array when no marbles exist", async () => {
+    const { getAllCustomMarbles } = await import("./db");
+    vi.mocked(getAllCustomMarbles).mockResolvedValueOnce([]);
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.customMarble.list();
+
+    expect(Array.isArray(result)).toBe(true);
+    expect(result).toHaveLength(0);
+  });
+});
+
+describe("customMarble.update", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("updates a custom marble", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.customMarble.update({
+      id: 1,
+      name: "Updated Marble Name",
+      origin: "Updated Origin",
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("status", "updated");
+  });
+});
+
+describe("customMarble.delete", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("deletes a custom marble", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.customMarble.delete({ id: 1 });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("status", "deleted");
+  });
+});
 
 describe("visualization.get", () => {
   beforeEach(() => {

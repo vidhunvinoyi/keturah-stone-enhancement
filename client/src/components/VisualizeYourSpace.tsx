@@ -25,6 +25,7 @@ import {
 import { trpc } from '@/lib/trpc';
 import ImageComparisonSlider from './ImageComparisonSlider';
 import { marbleInfo, type MarbleType } from '@/data/galleryData';
+import { Link } from 'wouter';
 
 type SurfaceDetection = {
   walls: {
@@ -595,10 +596,16 @@ export default function VisualizeYourSpace() {
           <h2 className="font-display text-4xl md:text-5xl font-semibold text-foreground mb-6">
             Visualize Your Space
           </h2>
-          <p className="font-body text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="font-body text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed mb-6">
             Upload a photo of your room and our AI will detect walls, floors, and ceilings. 
             Choose which surfaces to transform with premium Italian marble or upload your own custom marble.
           </p>
+          <Link href="/library">
+            <Button variant="outline" className="gap-2">
+              <Palette className="w-4 h-4" />
+              View Marble Library
+            </Button>
+          </Link>
         </motion.div>
 
         <div className="max-w-4xl mx-auto">

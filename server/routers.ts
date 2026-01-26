@@ -14,6 +14,7 @@ import {
   createCustomMarble,
   getCustomMarbleById,
   getCustomMarblesByOwner,
+  getAllCustomMarbles,
   updateCustomMarble,
   deleteCustomMarble
 } from "./db";
@@ -224,6 +225,16 @@ export const appRouter = router({
       .input(z.object({ ownerId: z.string() }))
       .query(async ({ input }) => {
         const marbles = await getCustomMarblesByOwner(input.ownerId);
+        return marbles.map(marble => ({
+          ...marble,
+          analysis: marble.marbleAnalysis ? JSON.parse(marble.marbleAnalysis) : null,
+        }));
+      }),
+
+    // List all custom marbles (for library page)
+    list: publicProcedure
+      .query(async () => {
+        const marbles = await getAllCustomMarbles();
         return marbles.map(marble => ({
           ...marble,
           analysis: marble.marbleAnalysis ? JSON.parse(marble.marbleAnalysis) : null,

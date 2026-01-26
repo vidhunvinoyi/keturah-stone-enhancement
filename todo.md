@@ -56,3 +56,19 @@
 - [x] Display custom marble preview with uploaded 300 DPI image
 - [x] Write unit tests for custom marble upload and processing (28 tests passing)
 - [x] Test complete custom marble replacement flow end-to-end
+
+
+## Marble Library Page (Completed)
+- [x] Create dedicated /library route for marble management
+- [x] Build grid view displaying all custom marbles with thumbnails
+- [x] Show marble details (name, origin, color, veining pattern) on cards
+- [x] Display Google Drive link icon for each marble
+- [x] Add edit button to open modal for updating marble details
+- [x] Add delete button with confirmation dialog
+- [x] Create backend endpoint to list all custom marbles
+- [x] Create backend endpoint to update custom marble details
+- [x] Create backend endpoint to delete custom marble
+- [x] Add navigation link to library from main page and visualize section
+- [x] Implement search/filter functionality for marble library
+- [x] Write unit tests for list, update, and delete endpoints
+- [x] Test complete library management flow end-to-end
