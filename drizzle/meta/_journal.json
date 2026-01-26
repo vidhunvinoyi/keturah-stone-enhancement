@@ -15,6 +15,13 @@
       "when": 1769078074798,
       "tag": "0001_dapper_plazm",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1769432698262,
+      "tag": "0002_happy_maelstrom",
+      "breakpoints": true
     }
   ]
 }

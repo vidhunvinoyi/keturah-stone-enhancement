@@ -15,6 +15,9 @@ vi.mock("./db", () => ({
     createdAt: new Date(),
     updatedAt: new Date(),
     errorMessage: null,
+    surfaceDetection: null,
+    materialSamples: null,
+    selectedSurfaces: null,
   }),
   getMarbleVisualizationsBySession: vi.fn().mockResolvedValue([
     {
@@ -27,6 +30,9 @@ vi.mock("./db", () => ({
       createdAt: new Date(),
       updatedAt: new Date(),
       errorMessage: null,
+      surfaceDetection: null,
+      materialSamples: null,
+      selectedSurfaces: null,
     },
   ]),
   updateMarbleVisualization: vi.fn().mockResolvedValue(undefined),
@@ -44,6 +50,40 @@ vi.mock("./storage", () => ({
 vi.mock("./_core/imageGeneration", () => ({
   generateImage: vi.fn().mockResolvedValue({
     url: "https://s3.example.com/generated/marble-transformed.jpg",
+  }),
+}));
+
+// Mock the LLM functions for surface detection
+vi.mock("./_core/llm", () => ({
+  invokeLLM: vi.fn().mockResolvedValue({
+    choices: [
+      {
+        message: {
+          content: JSON.stringify({
+            walls: {
+              detected: true,
+              confidence: 85,
+              material: "travertine",
+              description: "Beige travertine walls with natural veining",
+            },
+            floors: {
+              detected: true,
+              confidence: 90,
+              material: "marble",
+              description: "Polished marble flooring",
+            },
+            ceilings: {
+              detected: true,
+              confidence: 60,
+              material: "paint",
+              description: "White painted ceiling",
+            },
+            overallAnalysis: "Luxury interior with stone surfaces suitable for marble replacement",
+            canAutoDetect: true,
+          }),
+        },
+      },
+    ],
   }),
 }));
 
@@ -102,6 +142,242 @@ describe("visualization.upload", () => {
   });
 });
 
+describe("visualization.detectSurfaces", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("detects surfaces in an uploaded image", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.visualization.detectSurfaces({
+      visualizationId: 1,
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("detection");
+    expect(result.detection).toHaveProperty("walls");
+    expect(result.detection).toHaveProperty("floors");
+    expect(result.detection).toHaveProperty("ceilings");
+    expect(result.detection.walls.detected).toBe(true);
+    expect(result.detection.walls.confidence).toBe(85);
+    expect(result.detection.walls.material).toBe("travertine");
+    expect(result.detection.canAutoDetect).toBe(true);
+    expect(result.status).toBe("detected");
+  });
+
+  it("throws error when visualization not found", async () => {
+    const { getMarbleVisualizationById } = await import("./db");
+    vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce(undefined);
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.visualization.detectSurfaces({
+        visualizationId: 999,
+      })
+    ).rejects.toThrow("Visualization not found");
+  });
+});
+
+describe("visualization.uploadMaterialSample", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Reset LLM mock for material sample analysis
+    const llmModule = await import("./_core/llm");
+    vi.mocked(llmModule.invokeLLM).mockResolvedValue({
+      id: "test-id",
+      created: Date.now(),
+      model: "test-model",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: JSON.stringify({
+              materialType: "travertine",
+              colorPalette: ["beige", "cream", "tan"],
+              patterns: "Natural veining with subtle color variations",
+              characteristics: "Porous texture with filled holes, matte finish",
+            }),
+          },
+          finish_reason: "stop",
+        },
+      ],
+    });
+  });
+
+  it("uploads and analyzes a material sample", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const testSampleBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+    const result = await caller.visualization.uploadMaterialSample({
+      visualizationId: 1,
+      sampleBase64: testSampleBase64,
+      mimeType: "image/png",
+      surfaceType: "walls",
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("sample");
+    expect(result.sample).toHaveProperty("surfaceType", "walls");
+    expect(result.sample).toHaveProperty("sampleUrl");
+    expect(result.sample).toHaveProperty("analysis");
+    expect(result.sample.analysis).toHaveProperty("materialType");
+    expect(result.status).toBe("sample_uploaded");
+  });
+
+  it("throws error when visualization not found", async () => {
+    const { getMarbleVisualizationById } = await import("./db");
+    vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce(undefined);
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.visualization.uploadMaterialSample({
+        visualizationId: 999,
+        sampleBase64: "test",
+        mimeType: "image/png",
+        surfaceType: "walls",
+      })
+    ).rejects.toThrow("Visualization not found");
+  });
+});
+
+describe("visualization.processSelective", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("processes selected surfaces with bardiglio marble", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.visualization.processSelective({
+      visualizationId: 1,
+      marbleType: "bardiglio",
+      surfaces: {
+        walls: true,
+        floors: true,
+        ceilings: false,
+      },
+      useMaterialSample: false,
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("marbleType", "bardiglio");
+    expect(result).toHaveProperty("imageUrl");
+    expect(result).toHaveProperty("surfaces");
+    expect(result.surfaces.walls).toBe(true);
+    expect(result.surfaces.floors).toBe(true);
+    expect(result.surfaces.ceilings).toBe(false);
+    expect(result.status).toBe("completed");
+  });
+
+  it("processes only walls with venatino marble", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.visualization.processSelective({
+      visualizationId: 1,
+      marbleType: "venatino",
+      surfaces: {
+        walls: true,
+        floors: false,
+        ceilings: false,
+      },
+      useMaterialSample: false,
+    });
+
+    expect(result).toHaveProperty("marbleType", "venatino");
+    expect(result.surfaces.walls).toBe(true);
+    expect(result.surfaces.floors).toBe(false);
+    expect(result.status).toBe("completed");
+  });
+
+  it("throws error when no surfaces selected", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.visualization.processSelective({
+        visualizationId: 1,
+        marbleType: "bardiglio",
+        surfaces: {
+          walls: false,
+          floors: false,
+          ceilings: false,
+        },
+        useMaterialSample: false,
+      })
+    ).rejects.toThrow("Please select at least one surface to transform");
+  });
+
+  it("throws error when visualization not found", async () => {
+    const { getMarbleVisualizationById } = await import("./db");
+    vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce(undefined);
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.visualization.processSelective({
+        visualizationId: 999,
+        marbleType: "bardiglio",
+        surfaces: { walls: true, floors: true, ceilings: false },
+        useMaterialSample: false,
+      })
+    ).rejects.toThrow("Visualization not found");
+  });
+
+  it("uses material samples when available", async () => {
+    const { getMarbleVisualizationById } = await import("./db");
+    vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce({
+      id: 1,
+      sessionId: "test-session-123",
+      originalImageUrl: "https://example.com/original.jpg",
+      bardiglioImageUrl: null,
+      venatinoImageUrl: null,
+      status: "pending",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      errorMessage: null,
+      surfaceDetection: null,
+      materialSamples: JSON.stringify([
+        {
+          surfaceType: "walls",
+          sampleUrl: "https://example.com/sample.jpg",
+          analysis: {
+            materialType: "travertine",
+            colorPalette: ["beige"],
+            patterns: "Natural veining",
+            characteristics: "Porous texture",
+          },
+        },
+      ]),
+      selectedSurfaces: null,
+    });
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.visualization.processSelective({
+      visualizationId: 1,
+      marbleType: "bardiglio",
+      surfaces: { walls: true, floors: false, ceilings: false },
+      useMaterialSample: true,
+    });
+
+    expect(result.status).toBe("completed");
+    expect(result).toHaveProperty("imageUrl");
+  });
+});
+
 describe("visualization.get", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -137,7 +413,7 @@ describe("visualization.getBySession", () => {
   });
 });
 
-describe("visualization.process", () => {
+describe("visualization.process (backward compatibility)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -173,7 +449,6 @@ describe("visualization.process", () => {
   });
 
   it("returns cached result if already processed for marble type", async () => {
-    // Mock a visualization that already has bardiglio processed
     const { getMarbleVisualizationById } = await import("./db");
     vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce({
       id: 1,
@@ -185,6 +460,9 @@ describe("visualization.process", () => {
       createdAt: new Date(),
       updatedAt: new Date(),
       errorMessage: null,
+      surfaceDetection: null,
+      materialSamples: null,
+      selectedSurfaces: null,
     });
 
     const ctx = createPublicContext();
@@ -201,7 +479,7 @@ describe("visualization.process", () => {
 
   it("throws error when visualization not found", async () => {
     const { getMarbleVisualizationById } = await import("./db");
-    vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce(null);
+    vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce(undefined);
 
     const ctx = createPublicContext();
     const caller = appRouter.createCaller(ctx);

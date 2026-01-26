@@ -122,7 +122,7 @@ export async function getMarbleVisualizationsBySession(sessionId: string): Promi
 
 export async function updateMarbleVisualization(
   id: number,
-  data: Partial<Pick<MarbleVisualization, 'bardiglioImageUrl' | 'venatinoImageUrl' | 'status' | 'errorMessage'>>
+  data: Partial<Pick<MarbleVisualization, 'bardiglioImageUrl' | 'venatinoImageUrl' | 'status' | 'errorMessage' | 'surfaceDetection' | 'materialSamples' | 'selectedSurfaces'>>
 ): Promise<void> {
   const db = await getDb();
   if (!db) {

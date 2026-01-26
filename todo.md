@@ -19,3 +19,17 @@
 - [x] Create before/after comparison view for uploaded images
 - [x] Add download button for transformed images
 - [x] Test upload and visualization flow end-to-end
+
+## AI Surface Detection & Selective Material Replacement (Completed)
+- [x] Create AI surface detection endpoint using LLM vision capabilities
+- [x] Implement wall detection and identification in uploaded renders
+- [x] Implement floor detection and identification in uploaded renders
+- [x] Implement ceiling detection and identification in uploaded renders
+- [x] Create surface selection UI with checkboxes (walls, floors, ceilings)
+- [x] Update marble replacement to only transform selected surfaces
+- [x] Add material sample upload feature for manual fallback
+- [x] Implement AI material matching from user-provided sample snip
+- [x] Update database schema for surface selections and material samples
+- [x] Create visual feedback showing detected surfaces
+- [x] Write unit tests for surface detection and selective replacement
+- [x] Test complete surface detection and replacement flow

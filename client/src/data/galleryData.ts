@@ -264,4 +264,5 @@ export const marbleInfo = {
     description: 'A luminous white marble with soft gray veining, Venatino offers a bright, airy quality that enhances natural light and creates an atmosphere of refined luxury.',
     color: '#E8E8E8',
   },
+
 };

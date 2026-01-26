@@ -42,6 +42,12 @@ export const marbleVisualizations = mysqlTable("marble_visualizations", {
   status: mysqlEnum("status", ["pending", "processing", "completed", "failed"]).default("pending").notNull(),
   /** Error message if processing failed */
   errorMessage: text("errorMessage"),
+  /** JSON string containing surface detection results from AI analysis */
+  surfaceDetection: text("surfaceDetection"),
+  /** JSON string containing user-uploaded material samples and their analysis */
+  materialSamples: text("materialSamples"),
+  /** JSON string containing selected surfaces for transformation (walls, floors, ceilings) */
+  selectedSurfaces: text("selectedSurfaces"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
