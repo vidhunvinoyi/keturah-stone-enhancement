@@ -11,6 +11,8 @@ vi.mock("./db", () => ({
     originalImageUrl: "https://example.com/original.jpg",
     bardiglioImageUrl: null,
     venatinoImageUrl: null,
+    customMarbleImageUrl: null,
+    highlightImageUrl: null,
     status: "pending",
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -18,6 +20,7 @@ vi.mock("./db", () => ({
     surfaceDetection: null,
     materialSamples: null,
     selectedSurfaces: null,
+    customMarbleId: null,
   }),
   getMarbleVisualizationsBySession: vi.fn().mockResolvedValue([
     {
@@ -26,6 +29,8 @@ vi.mock("./db", () => ({
       originalImageUrl: "https://example.com/original.jpg",
       bardiglioImageUrl: null,
       venatinoImageUrl: null,
+      customMarbleImageUrl: null,
+      highlightImageUrl: null,
       status: "pending",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -33,9 +38,41 @@ vi.mock("./db", () => ({
       surfaceDetection: null,
       materialSamples: null,
       selectedSurfaces: null,
+      customMarbleId: null,
     },
   ]),
   updateMarbleVisualization: vi.fn().mockResolvedValue(undefined),
+  createCustomMarble: vi.fn().mockResolvedValue(1),
+  getCustomMarbleById: vi.fn().mockResolvedValue({
+    id: 1,
+    name: "Calacatta Gold",
+    origin: "Carrara, Italy",
+    baseColor: "White with gold undertones",
+    veiningPattern: "Bold gold and gray veining",
+    description: "Premium Italian marble",
+    imageUrl: "https://example.com/calacatta.jpg",
+    googleDriveLink: "https://drive.google.com/test",
+    analysis: JSON.stringify({
+      baseColor: "White",
+      veiningColors: ["gold", "gray"],
+      veiningPattern: "Bold dramatic veining",
+      texture: "Polished",
+      characteristics: "Luxurious appearance",
+      suggestedApplications: ["countertops", "flooring"],
+    }),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }),
+  getCustomMarbles: vi.fn().mockResolvedValue([
+    {
+      id: 1,
+      name: "Calacatta Gold",
+      origin: "Carrara, Italy",
+      imageUrl: "https://example.com/calacatta.jpg",
+      createdAt: new Date(),
+    },
+  ]),
+  updateCustomMarble: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Mock the storage functions
@@ -343,6 +380,8 @@ describe("visualization.processSelective", () => {
       originalImageUrl: "https://example.com/original.jpg",
       bardiglioImageUrl: null,
       venatinoImageUrl: null,
+      customMarbleImageUrl: null,
+      highlightImageUrl: null,
       status: "pending",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -361,6 +400,7 @@ describe("visualization.processSelective", () => {
         },
       ]),
       selectedSurfaces: null,
+      customMarbleId: null,
     });
 
     const ctx = createPublicContext();
@@ -377,6 +417,268 @@ describe("visualization.processSelective", () => {
     expect(result).toHaveProperty("imageUrl");
   });
 });
+
+describe("visualization.generateHighlight", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("generates surface highlight overlay image", async () => {
+    const { getMarbleVisualizationById } = await import("./db");
+    vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce({
+      id: 1,
+      sessionId: "test-session-123",
+      originalImageUrl: "https://example.com/original.jpg",
+      bardiglioImageUrl: null,
+      venatinoImageUrl: null,
+      customMarbleImageUrl: null,
+      highlightImageUrl: null,
+      status: "detected",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      errorMessage: null,
+      surfaceDetection: JSON.stringify({
+        walls: { detected: true, confidence: 85, material: "travertine", description: "Beige walls" },
+        floors: { detected: true, confidence: 90, material: "marble", description: "Marble floors" },
+        ceilings: { detected: true, confidence: 60, material: "paint", description: "White ceiling" },
+        overallAnalysis: "Test analysis",
+        canAutoDetect: true,
+      }),
+      materialSamples: null,
+      selectedSurfaces: null,
+      customMarbleId: null,
+    });
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.visualization.generateHighlight({
+      visualizationId: 1,
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("highlightImageUrl");
+    expect(result.status).toBe("highlighted");
+  });
+
+  it("throws error when visualization not found", async () => {
+    const { getMarbleVisualizationById } = await import("./db");
+    vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce(undefined);
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.visualization.generateHighlight({
+        visualizationId: 999,
+      })
+    ).rejects.toThrow("Visualization not found");
+  });
+
+  it("throws error when surfaces not detected", async () => {
+    const { getMarbleVisualizationById } = await import("./db");
+    vi.mocked(getMarbleVisualizationById).mockResolvedValueOnce({
+      id: 1,
+      sessionId: "test-session-123",
+      originalImageUrl: "https://example.com/original.jpg",
+      bardiglioImageUrl: null,
+      venatinoImageUrl: null,
+      customMarbleImageUrl: null,
+      highlightImageUrl: null,
+      status: "pending",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      errorMessage: null,
+      surfaceDetection: null,
+      materialSamples: null,
+      selectedSurfaces: null,
+      customMarbleId: null,
+    });
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.visualization.generateHighlight({
+        visualizationId: 1,
+      })
+    ).rejects.toThrow("Surface detection must be run first");
+  });
+});
+
+describe("visualization.processWithCustomMarble", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("processes surfaces with custom marble", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.visualization.processWithCustomMarble({
+      visualizationId: 1,
+      customMarbleId: 1,
+      surfaces: {
+        walls: true,
+        floors: true,
+        ceilings: false,
+      },
+      useMaterialSample: false,
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("imageUrl");
+    expect(result).toHaveProperty("customMarble");
+    expect(result.customMarble).toHaveProperty("id", 1);
+    expect(result.customMarble).toHaveProperty("name", "Calacatta Gold");
+    expect(result).toHaveProperty("surfaces");
+    expect(result.surfaces.walls).toBe(true);
+    expect(result.surfaces.floors).toBe(true);
+    expect(result.status).toBe("completed");
+  });
+
+  it("throws error when custom marble not found", async () => {
+    const { getCustomMarbleById } = await import("./db");
+    vi.mocked(getCustomMarbleById).mockResolvedValueOnce(undefined);
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.visualization.processWithCustomMarble({
+        visualizationId: 1,
+        customMarbleId: 999,
+        surfaces: { walls: true, floors: true, ceilings: false },
+        useMaterialSample: false,
+      })
+    ).rejects.toThrow("Custom marble not found");
+  });
+
+  it("throws error when no surfaces selected", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.visualization.processWithCustomMarble({
+        visualizationId: 1,
+        customMarbleId: 1,
+        surfaces: {
+          walls: false,
+          floors: false,
+          ceilings: false,
+        },
+        useMaterialSample: false,
+      })
+    ).rejects.toThrow("Please select at least one surface to transform");
+  });
+});
+
+describe("customMarble.create", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Reset LLM mock for marble analysis
+    const llmModule = await import("./_core/llm");
+    vi.mocked(llmModule.invokeLLM).mockResolvedValue({
+      id: "test-id",
+      created: Date.now(),
+      model: "test-model",
+      choices: [
+        {
+          index: 0,
+          message: {
+            role: "assistant",
+            content: JSON.stringify({
+              baseColor: "White with warm undertones",
+              veiningColors: ["gold", "gray", "brown"],
+              veiningPattern: "Bold dramatic veining with flowing lines",
+              texture: "Polished with subtle crystalline structure",
+              characteristics: "Luxurious appearance with high contrast veining",
+              suggestedApplications: ["countertops", "feature walls", "flooring"],
+            }),
+          },
+          finish_reason: "stop",
+        },
+      ],
+    });
+  });
+
+  it("creates a custom marble with image and details", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const testImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+    const result = await caller.customMarble.create({
+      name: "Calacatta Gold",
+      origin: "Carrara, Italy",
+      baseColor: "White with gold undertones",
+      veiningPattern: "Bold gold and gray veining",
+      description: "Premium Italian marble with dramatic veining",
+      imageBase64: testImageBase64,
+      mimeType: "image/png",
+      googleDriveLink: "https://drive.google.com/test-folder",
+    });
+
+    expect(result).toHaveProperty("id");
+    expect(result).toHaveProperty("name", "Calacatta Gold");
+    expect(result).toHaveProperty("imageUrl");
+    expect(result).toHaveProperty("googleDriveLink", "https://drive.google.com/test-folder");
+    expect(result).toHaveProperty("analysis");
+    expect(result.analysis).toHaveProperty("baseColor");
+    expect(result.analysis).toHaveProperty("veiningColors");
+    expect(result.analysis).toHaveProperty("veiningPattern");
+  });
+
+  it("creates a custom marble with minimal details", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const testImageBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+
+    const result = await caller.customMarble.create({
+      name: "Custom Marble",
+      imageBase64: testImageBase64,
+      mimeType: "image/png",
+    });
+
+    expect(result).toHaveProperty("id");
+    expect(result).toHaveProperty("name", "Custom Marble");
+    expect(result).toHaveProperty("imageUrl");
+  });
+});
+
+describe("customMarble.get", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("retrieves a custom marble by ID", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.customMarble.get({ id: 1 });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("name", "Calacatta Gold");
+    expect(result).toHaveProperty("origin", "Carrara, Italy");
+    expect(result).toHaveProperty("imageUrl");
+    expect(result).toHaveProperty("googleDriveLink");
+  });
+
+  it("throws error when custom marble not found", async () => {
+    const { getCustomMarbleById } = await import("./db");
+    vi.mocked(getCustomMarbleById).mockResolvedValueOnce(undefined);
+
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.customMarble.get({ id: 999 })
+    ).rejects.toThrow("Custom marble not found");
+  });
+});
+
+// Note: customMarble.list endpoint can be added if needed for listing all custom marbles
 
 describe("visualization.get", () => {
   beforeEach(() => {
@@ -456,6 +758,8 @@ describe("visualization.process (backward compatibility)", () => {
       originalImageUrl: "https://example.com/original.jpg",
       bardiglioImageUrl: "https://example.com/bardiglio-cached.jpg",
       venatinoImageUrl: null,
+      customMarbleImageUrl: null,
+      highlightImageUrl: null,
       status: "completed",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -463,6 +767,7 @@ describe("visualization.process (backward compatibility)", () => {
       surfaceDetection: null,
       materialSamples: null,
       selectedSurfaces: null,
+      customMarbleId: null,
     });
 
     const ctx = createPublicContext();

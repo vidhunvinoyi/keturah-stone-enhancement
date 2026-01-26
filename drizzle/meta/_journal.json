@@ -22,6 +22,13 @@
       "when": 1769432698262,
       "tag": "0002_happy_maelstrom",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1769433898795,
+      "tag": "0003_wide_sentinel",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,15 @@
 import { eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, marbleVisualizations, InsertMarbleVisualization, MarbleVisualization } from "../drizzle/schema";
+import { 
+  InsertUser, 
+  users, 
+  marbleVisualizations, 
+  InsertMarbleVisualization, 
+  MarbleVisualization,
+  customMarbles,
+  InsertCustomMarble,
+  CustomMarble
+} from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -122,7 +131,18 @@ export async function getMarbleVisualizationsBySession(sessionId: string): Promi
 
 export async function updateMarbleVisualization(
   id: number,
-  data: Partial<Pick<MarbleVisualization, 'bardiglioImageUrl' | 'venatinoImageUrl' | 'status' | 'errorMessage' | 'surfaceDetection' | 'materialSamples' | 'selectedSurfaces'>>
+  data: Partial<Pick<MarbleVisualization, 
+    'bardiglioImageUrl' | 
+    'venatinoImageUrl' | 
+    'customMarbleImageUrl' |
+    'highlightImageUrl' |
+    'status' | 
+    'errorMessage' | 
+    'surfaceDetection' | 
+    'materialSamples' | 
+    'selectedSurfaces' |
+    'customMarbleId'
+  >>
 ): Promise<void> {
   const db = await getDb();
   if (!db) {
@@ -130,4 +150,67 @@ export async function updateMarbleVisualization(
   }
 
   await db.update(marbleVisualizations).set(data).where(eq(marbleVisualizations.id, id));
+}
+
+// Custom Marble Helpers
+
+export async function createCustomMarble(data: InsertCustomMarble): Promise<number> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  const result = await db.insert(customMarbles).values(data);
+  return result[0].insertId;
+}
+
+export async function getCustomMarbleById(id: number): Promise<CustomMarble | undefined> {
+  const db = await getDb();
+  if (!db) {
+    return undefined;
+  }
+
+  const result = await db.select().from(customMarbles).where(eq(customMarbles.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getCustomMarblesByOwner(ownerId: string): Promise<CustomMarble[]> {
+  const db = await getDb();
+  if (!db) {
+    return [];
+  }
+
+  return await db.select().from(customMarbles).where(eq(customMarbles.ownerId, ownerId));
+}
+
+export async function updateCustomMarble(
+  id: number,
+  data: Partial<Pick<CustomMarble, 
+    'name' | 
+    'origin' | 
+    'baseColor' |
+    'veiningPattern' |
+    'description' | 
+    'imageUrl' | 
+    'googleDriveLink' | 
+    'thumbnailUrl' | 
+    'marbleAnalysis' |
+    'isPublic'
+  >>
+): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.update(customMarbles).set(data).where(eq(customMarbles.id, id));
+}
+
+export async function deleteCustomMarble(id: number): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+
+  await db.delete(customMarbles).where(eq(customMarbles.id, id));
 }

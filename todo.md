@@ -33,3 +33,26 @@
 - [x] Create visual feedback showing detected surfaces
 - [x] Write unit tests for surface detection and selective replacement
 - [x] Test complete surface detection and replacement flow
+
+## Surface Highlighting Feature (Completed)
+- [x] Create backend endpoint to generate surface highlight overlay image
+- [x] Implement color-coded overlay generation (walls=blue, floors=green, ceilings=yellow)
+- [x] Build frontend UI to display highlighted surfaces preview
+- [x] Add toggle to show/hide surface highlights on uploaded image
+- [x] Display confidence percentages for each detected surface
+- [x] Allow users to confirm or adjust surface selections based on highlights
+- [x] Update unit tests for surface highlighting feature
+- [x] Test complete highlighting flow end-to-end
+
+## Custom Marble Upload Feature (Completed)
+- [x] Update database schema for custom marble storage (name, origin, description, image URL, Google Drive link)
+- [x] Create backend endpoint for custom marble registration with details
+- [x] Implement 300 DPI high-resolution marble image upload to S3
+- [x] Add Google Drive link field for marble image collections
+- [x] Create marble details form (name, origin, color description, veining pattern)
+- [x] Build frontend UI for custom marble upload with preview
+- [x] Integrate custom marble into surface replacement processing
+- [x] Add custom marble selector alongside preset options (Bardiglio/Venatino)
+- [x] Display custom marble preview with uploaded 300 DPI image
+- [x] Write unit tests for custom marble upload and processing (28 tests passing)
+- [x] Test complete custom marble replacement flow end-to-end

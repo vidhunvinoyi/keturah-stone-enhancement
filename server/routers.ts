@@ -10,7 +10,12 @@ import {
   createMarbleVisualization, 
   getMarbleVisualizationById, 
   getMarbleVisualizationsBySession,
-  updateMarbleVisualization 
+  updateMarbleVisualization,
+  createCustomMarble,
+  getCustomMarbleById,
+  getCustomMarblesByOwner,
+  updateCustomMarble,
+  deleteCustomMarble
 } from "./db";
 import { nanoid } from "nanoid";
 
@@ -72,6 +77,33 @@ const surfaceDetectionSchema = {
   },
 };
 
+// Marble analysis schema for custom marble uploads
+const marbleAnalysisSchema = {
+  name: "marble_analysis",
+  strict: true,
+  schema: {
+    type: "object",
+    properties: {
+      baseColor: { type: "string", description: "Primary base color of the marble" },
+      veiningColors: { 
+        type: "array", 
+        items: { type: "string" },
+        description: "Colors present in the veining" 
+      },
+      veiningPattern: { type: "string", description: "Description of the veining pattern (e.g., bold dramatic, delicate subtle, linear, swirling)" },
+      texture: { type: "string", description: "Surface texture description" },
+      characteristics: { type: "string", description: "Key visual characteristics for replacement" },
+      suggestedApplications: { 
+        type: "array", 
+        items: { type: "string" },
+        description: "Best surfaces for this marble (walls, floors, ceilings)" 
+      },
+    },
+    required: ["baseColor", "veiningColors", "veiningPattern", "texture", "characteristics", "suggestedApplications"],
+    additionalProperties: false,
+  },
+};
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -83,6 +115,158 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+  }),
+
+  // Custom Marble Router
+  customMarble: router({
+    // Create a new custom marble with 300 DPI image upload
+    create: publicProcedure
+      .input(z.object({
+        name: z.string().min(1, "Marble name is required"),
+        origin: z.string().optional(),
+        baseColor: z.string().optional(),
+        veiningPattern: z.string().optional(),
+        description: z.string().optional(),
+        imageBase64: z.string().min(1, "Marble image is required"),
+        mimeType: z.string().default("image/jpeg"),
+        googleDriveLink: z.string().url().optional().or(z.literal("")),
+        ownerId: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const ownerId = input.ownerId || nanoid();
+        
+        // Upload the 300 DPI marble image to S3
+        const buffer = Buffer.from(input.imageBase64, "base64");
+        const fileKey = `marbles/${ownerId}/${Date.now()}-${input.name.toLowerCase().replace(/\s+/g, '-')}.${input.mimeType.split('/')[1] || 'jpg'}`;
+        const { url: imageUrl } = await storagePut(fileKey, buffer, input.mimeType);
+        
+        // Use AI to analyze the marble characteristics
+        const analysisResult = await invokeLLM({
+          messages: [
+            {
+              role: "system",
+              content: `You are an expert marble and stone analyst. Analyze the provided marble image and identify its key visual characteristics that will be used for material replacement in interior renders. Focus on:
+1. Base color and undertones
+2. Veining colors and patterns
+3. Texture and surface qualities
+4. Best applications (walls, floors, ceilings)`,
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Analyze this marble sample image for "${input.name}"${input.origin ? ` from ${input.origin}` : ''}. Provide detailed characteristics for use in AI-powered material replacement.`,
+                },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: imageUrl,
+                    detail: "high",
+                  },
+                },
+              ],
+            },
+          ],
+          response_format: {
+            type: "json_schema",
+            json_schema: marbleAnalysisSchema,
+          },
+        });
+
+        const analysisContent = analysisResult.choices[0]?.message?.content;
+        let marbleAnalysis = null;
+        if (analysisContent && typeof analysisContent === "string") {
+          marbleAnalysis = JSON.parse(analysisContent);
+        }
+
+        // Create the custom marble record
+        const id = await createCustomMarble({
+          ownerId,
+          name: input.name,
+          origin: input.origin || null,
+          baseColor: marbleAnalysis?.baseColor || input.baseColor || null,
+          veiningPattern: marbleAnalysis?.veiningPattern || input.veiningPattern || null,
+          description: input.description || null,
+          imageUrl,
+          googleDriveLink: input.googleDriveLink || null,
+          marbleAnalysis: marbleAnalysis ? JSON.stringify(marbleAnalysis) : null,
+          isPublic: "false",
+        });
+
+        return {
+          id,
+          ownerId,
+          name: input.name,
+          imageUrl,
+          googleDriveLink: input.googleDriveLink || null,
+          analysis: marbleAnalysis,
+          status: "created" as const,
+        };
+      }),
+
+    // Get a custom marble by ID
+    get: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .query(async ({ input }) => {
+        const marble = await getCustomMarbleById(input.id);
+        if (!marble) {
+          throw new Error("Custom marble not found");
+        }
+        return {
+          ...marble,
+          analysis: marble.marbleAnalysis ? JSON.parse(marble.marbleAnalysis) : null,
+        };
+      }),
+
+    // Get all custom marbles for an owner
+    getByOwner: publicProcedure
+      .input(z.object({ ownerId: z.string() }))
+      .query(async ({ input }) => {
+        const marbles = await getCustomMarblesByOwner(input.ownerId);
+        return marbles.map(marble => ({
+          ...marble,
+          analysis: marble.marbleAnalysis ? JSON.parse(marble.marbleAnalysis) : null,
+        }));
+      }),
+
+    // Update a custom marble
+    update: publicProcedure
+      .input(z.object({
+        id: z.number(),
+        name: z.string().optional(),
+        origin: z.string().optional(),
+        baseColor: z.string().optional(),
+        veiningPattern: z.string().optional(),
+        description: z.string().optional(),
+        googleDriveLink: z.string().url().optional().or(z.literal("")),
+      }))
+      .mutation(async ({ input }) => {
+        const { id, ...updateData } = input;
+        
+        // Filter out undefined values
+        const filteredData = Object.fromEntries(
+          Object.entries(updateData).filter(([_, v]) => v !== undefined)
+        ) as Parameters<typeof updateCustomMarble>[1];
+        
+        await updateCustomMarble(id, filteredData);
+        
+        return {
+          id,
+          status: "updated" as const,
+        };
+      }),
+
+    // Delete a custom marble
+    delete: publicProcedure
+      .input(z.object({ id: z.number() }))
+      .mutation(async ({ input }) => {
+        await deleteCustomMarble(input.id);
+        return {
+          id: input.id,
+          status: "deleted" as const,
+        };
+      }),
   }),
 
   // Marble Visualization Router
@@ -295,6 +479,132 @@ Also assess whether you can confidently auto-detect and replace materials, or if
         };
       }),
 
+    // Process with custom marble
+    processWithCustomMarble: publicProcedure
+      .input(z.object({
+        visualizationId: z.number(),
+        customMarbleId: z.number(),
+        surfaces: z.object({
+          walls: z.boolean().default(true),
+          floors: z.boolean().default(true),
+          ceilings: z.boolean().default(false),
+        }),
+        useMaterialSample: z.boolean().default(false),
+      }))
+      .mutation(async ({ input }) => {
+        const visualization = await getMarbleVisualizationById(input.visualizationId);
+        if (!visualization) {
+          throw new Error("Visualization not found");
+        }
+
+        const customMarble = await getCustomMarbleById(input.customMarbleId);
+        if (!customMarble) {
+          throw new Error("Custom marble not found");
+        }
+
+        // Update status to processing
+        await updateMarbleVisualization(input.visualizationId, { status: "processing" });
+
+        try {
+          // Build the surface-specific prompt
+          const selectedSurfaces: string[] = [];
+          if (input.surfaces.walls) selectedSurfaces.push("walls");
+          if (input.surfaces.floors) selectedSurfaces.push("floors");
+          if (input.surfaces.ceilings) selectedSurfaces.push("ceilings");
+
+          if (selectedSurfaces.length === 0) {
+            throw new Error("Please select at least one surface to transform");
+          }
+
+          const surfaceList = selectedSurfaces.join(", ");
+
+          // Parse marble analysis for detailed characteristics
+          const marbleAnalysis = customMarble.marbleAnalysis 
+            ? JSON.parse(customMarble.marbleAnalysis) 
+            : null;
+
+          // Get material sample info if using manual matching
+          let materialContext = "";
+          if (input.useMaterialSample && visualization.materialSamples) {
+            const samples = JSON.parse(visualization.materialSamples);
+            if (samples.length > 0) {
+              materialContext = `\n\nThe user has provided material samples to help identify surfaces. Focus on replacing materials that match these characteristics:\n${samples.map((s: { surfaceType: string; analysis: { materialType: string; characteristics: string } }) => 
+                `- ${s.surfaceType}: ${s.analysis.materialType} with ${s.analysis.characteristics}`
+              ).join("\n")}`;
+            }
+          }
+
+          // Build detailed marble description
+          let marbleDescription = `${customMarble.name}`;
+          if (customMarble.origin) {
+            marbleDescription += ` from ${customMarble.origin}`;
+          }
+          if (marbleAnalysis) {
+            marbleDescription += ` - ${marbleAnalysis.baseColor} base color with ${marbleAnalysis.veiningPattern} veining in ${marbleAnalysis.veiningColors?.join(', ') || 'contrasting'} tones. ${marbleAnalysis.characteristics}`;
+          } else if (customMarble.baseColor && customMarble.veiningPattern) {
+            marbleDescription += ` - ${customMarble.baseColor} base with ${customMarble.veiningPattern} veining`;
+          }
+
+          const prompt = `Transform this interior image by replacing the stone, marble, or travertine surfaces ONLY on the following: ${surfaceList}.
+
+Replace these surfaces with ${marbleDescription}.
+
+REFERENCE: Use the provided marble sample image as the exact reference for the marble appearance, color, and veining pattern.
+
+IMPORTANT INSTRUCTIONS:
+- ONLY modify the ${surfaceList} - leave all other surfaces unchanged
+- Match the marble appearance EXACTLY to the reference marble image provided
+- Maintain the exact same composition, lighting, shadows, reflections, and perspective
+- Preserve all furniture, fixtures, decorations, and architectural details
+- The result should be photorealistic with natural marble texture and veining
+- Match the scale and direction of the marble veining appropriately for each surface${materialContext}`;
+
+          const result = await generateImage({
+            prompt,
+            originalImages: [
+              {
+                url: visualization.originalImageUrl,
+                mimeType: "image/jpeg",
+              },
+              {
+                url: customMarble.imageUrl,
+                mimeType: "image/jpeg",
+              },
+            ],
+          });
+
+          if (!result.url) {
+            throw new Error("Image generation failed - no URL returned");
+          }
+
+          // Update the visualization record with the processed image
+          await updateMarbleVisualization(input.visualizationId, {
+            customMarbleImageUrl: result.url,
+            customMarbleId: input.customMarbleId,
+            status: "completed",
+          });
+
+          return {
+            id: visualization.id,
+            imageUrl: result.url,
+            customMarble: {
+              id: customMarble.id,
+              name: customMarble.name,
+              imageUrl: customMarble.imageUrl,
+            },
+            surfaces: input.surfaces,
+            status: "completed" as const,
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          await updateMarbleVisualization(input.visualizationId, { 
+            status: "failed", 
+            errorMessage 
+          });
+          throw error;
+        }
+      }),
+
     // Process the uploaded image with selective surface marble replacement
     processSelective: publicProcedure
       .input(z.object({
@@ -465,6 +775,69 @@ IMPORTANT INSTRUCTIONS:
             errorMessage 
           });
           throw error;
+        }
+      }),
+
+    // Generate surface highlight overlay image
+    generateHighlight: publicProcedure
+      .input(z.object({
+        visualizationId: z.number(),
+      }))
+      .mutation(async ({ input }) => {
+        const visualization = await getMarbleVisualizationById(input.visualizationId);
+        if (!visualization) {
+          throw new Error("Visualization not found");
+        }
+
+        // Check if we have surface detection data
+        if (!visualization.surfaceDetection) {
+          throw new Error("Surface detection must be run first");
+        }
+
+        const detection = JSON.parse(visualization.surfaceDetection);
+
+        try {
+          // Generate a highlighted version of the image showing detected surfaces
+          const highlightPrompt = `Create a visual overlay on this interior image that highlights the detected surfaces with semi-transparent color overlays:
+
+- WALLS: Apply a semi-transparent BLUE overlay (rgba(59, 130, 246, 0.4)) to all wall surfaces${detection.walls.detected ? ` - Detected with ${detection.walls.confidence}% confidence: ${detection.walls.description}` : ' - Not detected'}
+- FLOORS: Apply a semi-transparent GREEN overlay (rgba(34, 197, 94, 0.4)) to all floor surfaces${detection.floors.detected ? ` - Detected with ${detection.floors.confidence}% confidence: ${detection.floors.description}` : ' - Not detected'}
+- CEILINGS: Apply a semi-transparent YELLOW/AMBER overlay (rgba(245, 158, 11, 0.4)) to all ceiling surfaces${detection.ceilings.detected ? ` - Detected with ${detection.ceilings.confidence}% confidence: ${detection.ceilings.description}` : ' - Not detected'}
+
+IMPORTANT INSTRUCTIONS:
+- Keep the original image clearly visible beneath the overlays
+- The overlays should be semi-transparent so the original surfaces are still visible
+- Only highlight surfaces that were detected (confidence > 50%)
+- Maintain all other elements (furniture, fixtures, decorations) without any overlay
+- The result should clearly show which areas will be transformed with marble`;
+
+          const result = await generateImage({
+            prompt: highlightPrompt,
+            originalImages: [{
+              url: visualization.originalImageUrl,
+              mimeType: "image/jpeg",
+            }],
+          });
+
+          if (!result.url) {
+            throw new Error("Highlight generation failed - no URL returned");
+          }
+
+          // Store the highlight image URL
+          await updateMarbleVisualization(input.visualizationId, {
+            highlightImageUrl: result.url,
+          });
+
+          return {
+            id: visualization.id,
+            highlightImageUrl: result.url,
+            detection: detection,
+            status: "highlighted" as const,
+          };
+        } catch (error) {
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          console.error("Highlight generation error:", errorMessage);
+          throw new Error(`Highlight generation failed: ${errorMessage}`);
         }
       }),
 

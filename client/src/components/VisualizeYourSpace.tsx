@@ -2,6 +2,9 @@ import { useState, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { 
   Upload, 
@@ -14,7 +17,10 @@ import {
   Layers,
   ImagePlus,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  ExternalLink,
+  Palette
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import ImageComparisonSlider from './ImageComparisonSlider';
@@ -43,12 +49,33 @@ type SurfaceDetection = {
   canAutoDetect: boolean;
 };
 
+type CustomMarble = {
+  id: number;
+  name: string;
+  origin?: string | null;
+  baseColor?: string | null;
+  veiningPattern?: string | null;
+  description?: string | null;
+  imageUrl: string;
+  googleDriveLink?: string | null;
+  analysis?: {
+    baseColor: string;
+    veiningColors: string[];
+    veiningPattern: string;
+    texture: string;
+    characteristics: string;
+    suggestedApplications: string[];
+  } | null;
+};
+
 type VisualizationState = {
   id: number;
   sessionId: string;
   originalImageUrl: string;
   bardiglioImageUrl?: string;
   venatinoImageUrl?: string;
+  customMarbleImageUrl?: string;
+  highlightImageUrl?: string;
   status: 'pending' | 'processing' | 'completed' | 'failed';
   surfaceDetection?: SurfaceDetection;
   materialSamples?: Array<{
@@ -69,13 +96,17 @@ type SurfaceSelection = {
   ceilings: boolean;
 };
 
+type MarbleSelection = 'bardiglio' | 'venatino' | 'custom';
+
 export default function VisualizeYourSpace() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isUploadingSample, setIsUploadingSample] = useState(false);
-  const [selectedMarble, setSelectedMarble] = useState<MarbleType>('bardiglio');
+  const [isCreatingCustomMarble, setIsCreatingCustomMarble] = useState(false);
+  const [selectedMarbleType, setSelectedMarbleType] = useState<MarbleSelection>('bardiglio');
+  const [selectedCustomMarble, setSelectedCustomMarble] = useState<CustomMarble | null>(null);
   const [visualization, setVisualization] = useState<VisualizationState | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [surfaceSelection, setSurfaceSelection] = useState<SurfaceSelection>({
@@ -84,14 +115,33 @@ export default function VisualizeYourSpace() {
     ceilings: false,
   });
   const [showSampleUpload, setShowSampleUpload] = useState(false);
+  const [showCustomMarbleForm, setShowCustomMarbleForm] = useState(false);
   const [sampleSurfaceType, setSampleSurfaceType] = useState<'walls' | 'floors' | 'ceilings'>('walls');
+  const [customMarbles, setCustomMarbles] = useState<CustomMarble[]>([]);
+  
+  // Custom marble form state
+  const [customMarbleForm, setCustomMarbleForm] = useState({
+    name: '',
+    origin: '',
+    baseColor: '',
+    veiningPattern: '',
+    description: '',
+    googleDriveLink: '',
+  });
+  const [customMarblePreview, setCustomMarblePreview] = useState<string | null>(null);
+  const [customMarbleFile, setCustomMarbleFile] = useState<File | null>(null);
+  
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sampleInputRef = useRef<HTMLInputElement>(null);
+  const customMarbleInputRef = useRef<HTMLInputElement>(null);
 
   const uploadMutation = trpc.visualization.upload.useMutation();
   const detectSurfacesMutation = trpc.visualization.detectSurfaces.useMutation();
   const uploadSampleMutation = trpc.visualization.uploadMaterialSample.useMutation();
   const processSelectiveMutation = trpc.visualization.processSelective.useMutation();
+  const processWithCustomMarbleMutation = trpc.visualization.processWithCustomMarble.useMutation();
+  const createCustomMarbleMutation = trpc.customMarble.create.useMutation();
+  const generateHighlightMutation = trpc.visualization.generateHighlight.useMutation();
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -195,6 +245,32 @@ export default function VisualizeYourSpace() {
     }
   };
 
+  const handleGenerateHighlight = async () => {
+    if (!visualization) return;
+    
+    setIsProcessing(true);
+    try {
+      const result = await generateHighlightMutation.mutateAsync({
+        visualizationId: visualization.id,
+      });
+      
+      setVisualization(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          highlightImageUrl: result.highlightImageUrl,
+        };
+      });
+      
+      toast.success('Surface highlights generated!');
+    } catch (error) {
+      console.error('Highlight generation error:', error);
+      toast.error('Failed to generate surface highlights.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
@@ -266,6 +342,101 @@ export default function VisualizeYourSpace() {
     }
   };
 
+  const handleCustomMarbleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    const file = files[0];
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please upload an image file');
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('Image size must be less than 50MB for 300 DPI images');
+      return;
+    }
+
+    setCustomMarbleFile(file);
+    const preview = URL.createObjectURL(file);
+    setCustomMarblePreview(preview);
+  };
+
+  const handleCreateCustomMarble = async () => {
+    if (!customMarbleForm.name.trim()) {
+      toast.error('Please enter a marble name');
+      return;
+    }
+
+    if (!customMarbleFile) {
+      toast.error('Please upload a 300 DPI marble image');
+      return;
+    }
+
+    setIsCreatingCustomMarble(true);
+
+    try {
+      const reader = new FileReader();
+      const base64Promise = new Promise<string>((resolve, reject) => {
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(',')[1];
+          resolve(base64);
+        };
+        reader.onerror = reject;
+      });
+      reader.readAsDataURL(customMarbleFile);
+      const imageBase64 = await base64Promise;
+
+      const result = await createCustomMarbleMutation.mutateAsync({
+        name: customMarbleForm.name,
+        origin: customMarbleForm.origin || undefined,
+        baseColor: customMarbleForm.baseColor || undefined,
+        veiningPattern: customMarbleForm.veiningPattern || undefined,
+        description: customMarbleForm.description || undefined,
+        imageBase64,
+        mimeType: customMarbleFile.type,
+        googleDriveLink: customMarbleForm.googleDriveLink || undefined,
+      });
+
+      const newMarble: CustomMarble = {
+        id: result.id,
+        name: result.name,
+        origin: customMarbleForm.origin || null,
+        baseColor: result.analysis?.baseColor || customMarbleForm.baseColor || null,
+        veiningPattern: result.analysis?.veiningPattern || customMarbleForm.veiningPattern || null,
+        description: customMarbleForm.description || null,
+        imageUrl: result.imageUrl,
+        googleDriveLink: result.googleDriveLink,
+        analysis: result.analysis,
+      };
+
+      setCustomMarbles(prev => [...prev, newMarble]);
+      setSelectedCustomMarble(newMarble);
+      setSelectedMarbleType('custom');
+      
+      // Reset form
+      setCustomMarbleForm({
+        name: '',
+        origin: '',
+        baseColor: '',
+        veiningPattern: '',
+        description: '',
+        googleDriveLink: '',
+      });
+      setCustomMarbleFile(null);
+      setCustomMarblePreview(null);
+      setShowCustomMarbleForm(false);
+
+      toast.success(`${result.name} marble added successfully!`);
+    } catch (error) {
+      console.error('Custom marble creation error:', error);
+      toast.error('Failed to create custom marble. Please try again.');
+    } finally {
+      setIsCreatingCustomMarble(false);
+    }
+  };
+
   const handleProcess = async () => {
     if (!visualization) return;
 
@@ -278,28 +449,56 @@ export default function VisualizeYourSpace() {
     setIsProcessing(true);
 
     try {
-      const result = await processSelectiveMutation.mutateAsync({
-        visualizationId: visualization.id,
-        marbleType: selectedMarble,
-        surfaces: surfaceSelection,
-        useMaterialSample: (visualization.materialSamples?.length || 0) > 0,
-      });
+      if (selectedMarbleType === 'custom' && selectedCustomMarble) {
+        // Process with custom marble
+        const result = await processWithCustomMarbleMutation.mutateAsync({
+          visualizationId: visualization.id,
+          customMarbleId: selectedCustomMarble.id,
+          surfaces: surfaceSelection,
+          useMaterialSample: (visualization.materialSamples?.length || 0) > 0,
+        });
 
-      setVisualization(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          [selectedMarble === 'bardiglio' ? 'bardiglioImageUrl' : 'venatinoImageUrl']: result.imageUrl,
-          status: 'completed',
-        };
-      });
+        setVisualization(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            customMarbleImageUrl: result.imageUrl,
+            status: 'completed',
+          };
+        });
 
-      const surfaceNames = [];
-      if (surfaceSelection.walls) surfaceNames.push('walls');
-      if (surfaceSelection.floors) surfaceNames.push('floors');
-      if (surfaceSelection.ceilings) surfaceNames.push('ceilings');
+        const surfaceNames = [];
+        if (surfaceSelection.walls) surfaceNames.push('walls');
+        if (surfaceSelection.floors) surfaceNames.push('floors');
+        if (surfaceSelection.ceilings) surfaceNames.push('ceilings');
 
-      toast.success(`${marbleInfo[selectedMarble].name} marble applied to ${surfaceNames.join(', ')}!`);
+        toast.success(`${selectedCustomMarble.name} marble applied to ${surfaceNames.join(', ')}!`);
+      } else {
+        // Process with preset marble (bardiglio or venatino)
+        const marbleType = selectedMarbleType as MarbleType;
+        const result = await processSelectiveMutation.mutateAsync({
+          visualizationId: visualization.id,
+          marbleType,
+          surfaces: surfaceSelection,
+          useMaterialSample: (visualization.materialSamples?.length || 0) > 0,
+        });
+
+        setVisualization(prev => {
+          if (!prev) return null;
+          return {
+            ...prev,
+            [marbleType === 'bardiglio' ? 'bardiglioImageUrl' : 'venatinoImageUrl']: result.imageUrl,
+            status: 'completed',
+          };
+        });
+
+        const surfaceNames = [];
+        if (surfaceSelection.walls) surfaceNames.push('walls');
+        if (surfaceSelection.floors) surfaceNames.push('floors');
+        if (surfaceSelection.ceilings) surfaceNames.push('ceilings');
+
+        toast.success(`${marbleInfo[marbleType].name} marble applied to ${surfaceNames.join(', ')}!`);
+      }
     } catch (error) {
       console.error('Processing error:', error);
       toast.error('Failed to process image. Please try again.');
@@ -309,9 +508,18 @@ export default function VisualizeYourSpace() {
   };
 
   const handleDownload = async () => {
-    const imageUrl = selectedMarble === 'bardiglio' 
-      ? visualization?.bardiglioImageUrl 
-      : visualization?.venatinoImageUrl;
+    let imageUrl: string | undefined;
+    let marbleName: string;
+    
+    if (selectedMarbleType === 'custom' && selectedCustomMarble) {
+      imageUrl = visualization?.customMarbleImageUrl;
+      marbleName = selectedCustomMarble.name;
+    } else {
+      imageUrl = selectedMarbleType === 'bardiglio' 
+        ? visualization?.bardiglioImageUrl 
+        : visualization?.venatinoImageUrl;
+      marbleName = marbleInfo[selectedMarbleType as MarbleType].name;
+    }
     
     if (!imageUrl) return;
 
@@ -321,7 +529,7 @@ export default function VisualizeYourSpace() {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `marble-visualization-${selectedMarble}-${Date.now()}.jpg`;
+      link.download = `marble-visualization-${marbleName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.jpg`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -336,16 +544,25 @@ export default function VisualizeYourSpace() {
     setVisualization(null);
     setPreviewUrl(null);
     setShowSampleUpload(false);
+    setShowCustomMarbleForm(false);
     setSurfaceSelection({ walls: true, floors: true, ceilings: false });
+    setSelectedMarbleType('bardiglio');
+    setSelectedCustomMarble(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
   };
 
-  const currentTransformedImage = selectedMarble === 'bardiglio' 
-    ? visualization?.bardiglioImageUrl 
-    : visualization?.venatinoImageUrl;
+  const getCurrentTransformedImage = () => {
+    if (selectedMarbleType === 'custom' && selectedCustomMarble) {
+      return visualization?.customMarbleImageUrl;
+    }
+    return selectedMarbleType === 'bardiglio' 
+      ? visualization?.bardiglioImageUrl 
+      : visualization?.venatinoImageUrl;
+  };
 
+  const currentTransformedImage = getCurrentTransformedImage();
   const hasTransformation = !!currentTransformedImage;
   const hasDetection = !!visualization?.surfaceDetection;
 
@@ -353,6 +570,13 @@ export default function VisualizeYourSpace() {
     if (!detected) return <AlertCircle className="w-4 h-4 text-muted-foreground" />;
     if (confidence >= 70) return <CheckCircle2 className="w-4 h-4 text-green-500" />;
     return <AlertCircle className="w-4 h-4 text-yellow-500" />;
+  };
+
+  const getMarbleDisplayName = () => {
+    if (selectedMarbleType === 'custom' && selectedCustomMarble) {
+      return selectedCustomMarble.name;
+    }
+    return marbleInfo[selectedMarbleType as MarbleType].name;
   };
 
   return (
@@ -373,7 +597,7 @@ export default function VisualizeYourSpace() {
           </h2>
           <p className="font-body text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
             Upload a photo of your room and our AI will detect walls, floors, and ceilings. 
-            Choose which surfaces to transform with premium Italian marble.
+            Choose which surfaces to transform with premium Italian marble or upload your own custom marble.
           </p>
         </motion.div>
 
@@ -467,11 +691,25 @@ export default function VisualizeYourSpace() {
                 {/* Surface Selection Panel */}
                 {hasDetection && !isDetecting && (
                   <div className="bg-card rounded-xl p-6 shadow-lg">
-                    <div className="flex items-center gap-2 mb-4">
-                      <Layers className="w-5 h-5 text-primary" />
-                      <h3 className="font-display font-semibold text-foreground">
-                        Select Surfaces to Transform
-                      </h3>
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Layers className="w-5 h-5 text-primary" />
+                        <h3 className="font-display font-semibold text-foreground">
+                          Select Surfaces to Transform
+                        </h3>
+                      </div>
+                      {visualization.surfaceDetection && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleGenerateHighlight}
+                          disabled={isProcessing}
+                          className="text-xs"
+                        >
+                          <Palette className="w-3 h-3 mr-1" />
+                          Show Highlights
+                        </Button>
+                      )}
                     </div>
                     
                     <div className="grid md:grid-cols-3 gap-4 mb-4">
@@ -584,40 +822,314 @@ export default function VisualizeYourSpace() {
                 )}
 
                 {/* Marble Type Selector */}
-                <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                  {(['bardiglio', 'venatino'] as MarbleType[]).map((marble) => (
-                    <button
-                      key={marble}
-                      onClick={() => setSelectedMarble(marble)}
-                      disabled={isProcessing}
-                      className={`flex items-center gap-3 px-6 py-4 rounded-xl transition-all duration-300 ${
-                        selectedMarble === marble
-                          ? 'bg-card shadow-lg ring-2 ring-primary'
-                          : 'bg-card/50 hover:bg-card hover:shadow-md'
-                      } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    >
-                      <div
-                        className="w-8 h-8 rounded-full"
-                        style={{ backgroundColor: marbleInfo[marble].color }}
-                      />
-                      <div className="text-left">
-                        <p className="font-display font-semibold text-foreground">
-                          {marbleInfo[marble].name}
-                        </p>
-                        <p className="font-body text-xs text-muted-foreground">
-                          {marbleInfo[marble].origin}
-                        </p>
-                      </div>
-                      {selectedMarble === marble && (
-                        <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center ml-2">
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
-                            <polyline points="20 6 9 17 4 12" />
-                          </svg>
+                <div className="space-y-4">
+                  <h3 className="font-display font-semibold text-foreground text-center">
+                    Choose Your Marble
+                  </h3>
+                  
+                  {/* Preset Marbles */}
+                  <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                    {(['bardiglio', 'venatino'] as MarbleType[]).map((marble) => (
+                      <button
+                        key={marble}
+                        onClick={() => {
+                          setSelectedMarbleType(marble);
+                          setSelectedCustomMarble(null);
+                        }}
+                        disabled={isProcessing}
+                        className={`flex items-center gap-3 px-6 py-4 rounded-xl transition-all duration-300 ${
+                          selectedMarbleType === marble
+                            ? 'bg-card shadow-lg ring-2 ring-primary'
+                            : 'bg-card/50 hover:bg-card hover:shadow-md'
+                        } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
+                        <div
+                          className="w-8 h-8 rounded-full"
+                          style={{ backgroundColor: marbleInfo[marble].color }}
+                        />
+                        <div className="text-left">
+                          <p className="font-display font-semibold text-foreground">
+                            {marbleInfo[marble].name}
+                          </p>
+                          <p className="font-body text-xs text-muted-foreground">
+                            {marbleInfo[marble].origin}
+                          </p>
                         </div>
-                      )}
-                    </button>
-                  ))}
+                        {selectedMarbleType === marble && (
+                          <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center ml-2">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Custom Marbles */}
+                  {customMarbles.length > 0 && (
+                    <div className="flex flex-wrap gap-3 justify-center">
+                      {customMarbles.map((marble) => (
+                        <button
+                          key={marble.id}
+                          onClick={() => {
+                            setSelectedMarbleType('custom');
+                            setSelectedCustomMarble(marble);
+                          }}
+                          disabled={isProcessing}
+                          className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
+                            selectedMarbleType === 'custom' && selectedCustomMarble?.id === marble.id
+                              ? 'bg-card shadow-lg ring-2 ring-primary'
+                              : 'bg-card/50 hover:bg-card hover:shadow-md'
+                          } ${isProcessing ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <img
+                            src={marble.imageUrl}
+                            alt={marble.name}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                          <div className="text-left">
+                            <p className="font-display font-semibold text-foreground text-sm">
+                              {marble.name}
+                            </p>
+                            {marble.origin && (
+                              <p className="font-body text-xs text-muted-foreground">
+                                {marble.origin}
+                              </p>
+                            )}
+                          </div>
+                          {marble.googleDriveLink && (
+                            <a
+                              href={marble.googleDriveLink}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-primary hover:text-primary/80"
+                            >
+                              <ExternalLink className="w-4 h-4" />
+                            </a>
+                          )}
+                          {selectedMarbleType === 'custom' && selectedCustomMarble?.id === marble.id && (
+                            <div className="w-5 h-5 bg-primary rounded-full flex items-center justify-center">
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                                <polyline points="20 6 9 17 4 12" />
+                              </svg>
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Add Custom Marble Button */}
+                  <div className="flex justify-center">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowCustomMarbleForm(true)}
+                      disabled={isProcessing}
+                      className="gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Custom Marble
+                    </Button>
+                  </div>
                 </div>
+
+                {/* Custom Marble Form Modal */}
+                <AnimatePresence>
+                  {showCustomMarbleForm && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      exit={{ opacity: 0 }}
+                      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                      onClick={() => setShowCustomMarbleForm(false)}
+                    >
+                      <motion.div
+                        initial={{ scale: 0.95, opacity: 0 }}
+                        animate={{ scale: 1, opacity: 1 }}
+                        exit={{ scale: 0.95, opacity: 0 }}
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-card rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+                      >
+                        <div className="flex items-center justify-between mb-6">
+                          <h3 className="font-display text-xl font-semibold text-foreground">
+                            Add Custom Marble
+                          </h3>
+                          <button
+                            onClick={() => setShowCustomMarbleForm(false)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <X className="w-5 h-5" />
+                          </button>
+                        </div>
+
+                        <div className="space-y-4">
+                          {/* Marble Image Upload */}
+                          <div>
+                            <Label htmlFor="marbleImage" className="font-body text-sm">
+                              300 DPI Marble Image *
+                            </Label>
+                            <div
+                              onClick={() => customMarbleInputRef.current?.click()}
+                              className={`mt-2 border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all ${
+                                customMarblePreview
+                                  ? 'border-primary bg-primary/5'
+                                  : 'border-muted-foreground/30 hover:border-primary/50'
+                              }`}
+                            >
+                              {customMarblePreview ? (
+                                <div className="relative">
+                                  <img
+                                    src={customMarblePreview}
+                                    alt="Custom marble preview"
+                                    className="w-full h-32 object-cover rounded-lg"
+                                  />
+                                  <p className="font-body text-xs text-muted-foreground mt-2 text-center">
+                                    Click to change image
+                                  </p>
+                                </div>
+                              ) : (
+                                <div className="text-center">
+                                  <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                                  <p className="font-body text-sm text-muted-foreground">
+                                    Upload 300 DPI marble image
+                                  </p>
+                                  <p className="font-body text-xs text-muted-foreground/70 mt-1">
+                                    Max 50MB • JPEG, PNG
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <input
+                              ref={customMarbleInputRef}
+                              type="file"
+                              accept="image/*"
+                              onChange={handleCustomMarbleImageSelect}
+                              className="hidden"
+                            />
+                          </div>
+
+                          {/* Marble Name */}
+                          <div>
+                            <Label htmlFor="marbleName" className="font-body text-sm">
+                              Marble Name *
+                            </Label>
+                            <Input
+                              id="marbleName"
+                              value={customMarbleForm.name}
+                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, name: e.target.value }))}
+                              placeholder="e.g., Calacatta Gold"
+                              className="mt-1"
+                            />
+                          </div>
+
+                          {/* Origin */}
+                          <div>
+                            <Label htmlFor="marbleOrigin" className="font-body text-sm">
+                              Origin / Quarry Location
+                            </Label>
+                            <Input
+                              id="marbleOrigin"
+                              value={customMarbleForm.origin}
+                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, origin: e.target.value }))}
+                              placeholder="e.g., Carrara, Italy"
+                              className="mt-1"
+                            />
+                          </div>
+
+                          {/* Base Color */}
+                          <div>
+                            <Label htmlFor="marbleColor" className="font-body text-sm">
+                              Base Color
+                            </Label>
+                            <Input
+                              id="marbleColor"
+                              value={customMarbleForm.baseColor}
+                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, baseColor: e.target.value }))}
+                              placeholder="e.g., Warm white with gold undertones"
+                              className="mt-1"
+                            />
+                          </div>
+
+                          {/* Veining Pattern */}
+                          <div>
+                            <Label htmlFor="marbleVeining" className="font-body text-sm">
+                              Veining Pattern
+                            </Label>
+                            <Input
+                              id="marbleVeining"
+                              value={customMarbleForm.veiningPattern}
+                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, veiningPattern: e.target.value }))}
+                              placeholder="e.g., Bold gold and gray veining"
+                              className="mt-1"
+                            />
+                          </div>
+
+                          {/* Description */}
+                          <div>
+                            <Label htmlFor="marbleDescription" className="font-body text-sm">
+                              Description
+                            </Label>
+                            <Textarea
+                              id="marbleDescription"
+                              value={customMarbleForm.description}
+                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, description: e.target.value }))}
+                              placeholder="Describe the marble characteristics..."
+                              className="mt-1"
+                              rows={3}
+                            />
+                          </div>
+
+                          {/* Google Drive Link */}
+                          <div>
+                            <Label htmlFor="marbleGoogleDrive" className="font-body text-sm">
+                              Google Drive Link (Optional)
+                            </Label>
+                            <Input
+                              id="marbleGoogleDrive"
+                              value={customMarbleForm.googleDriveLink}
+                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, googleDriveLink: e.target.value }))}
+                              placeholder="https://drive.google.com/..."
+                              className="mt-1"
+                            />
+                            <p className="font-body text-xs text-muted-foreground mt-1">
+                              Link to full-resolution marble image collection
+                            </p>
+                          </div>
+
+                          {/* Submit Button */}
+                          <div className="flex gap-3 pt-4">
+                            <Button
+                              variant="outline"
+                              onClick={() => setShowCustomMarbleForm(false)}
+                              className="flex-1"
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              onClick={handleCreateCustomMarble}
+                              disabled={isCreatingCustomMarble || !customMarbleForm.name || !customMarbleFile}
+                              className="flex-1"
+                            >
+                              {isCreatingCustomMarble ? (
+                                <>
+                                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                                  Creating...
+                                </>
+                              ) : (
+                                <>
+                                  <Plus className="w-4 h-4 mr-2" />
+                                  Add Marble
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      </motion.div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
 
                 {/* Image Display */}
                 <div className="relative rounded-2xl overflow-hidden bg-card shadow-xl">
@@ -626,9 +1138,24 @@ export default function VisualizeYourSpace() {
                       beforeImage={visualization.originalImageUrl}
                       afterImage={currentTransformedImage}
                       beforeLabel="Original"
-                      afterLabel={marbleInfo[selectedMarble].name}
+                      afterLabel={getMarbleDisplayName()}
                       className="aspect-video"
                     />
+                  ) : visualization.highlightImageUrl ? (
+                    <div className="relative aspect-video">
+                      <img
+                        src={visualization.highlightImageUrl}
+                        alt="Surface highlights"
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute bottom-4 left-4 right-4 bg-black/70 rounded-lg p-3">
+                        <p className="font-body text-sm text-white text-center">
+                          <span className="inline-block w-3 h-3 bg-blue-500 rounded-full mr-1"></span> Walls
+                          <span className="inline-block w-3 h-3 bg-green-500 rounded-full mx-2 ml-4"></span> Floors
+                          <span className="inline-block w-3 h-3 bg-yellow-500 rounded-full mx-2 ml-4"></span> Ceilings
+                        </p>
+                      </div>
+                    </div>
                   ) : (
                     <div className="relative aspect-video">
                       <img
@@ -643,7 +1170,7 @@ export default function VisualizeYourSpace() {
                             Transforming selected surfaces...
                           </p>
                           <p className="font-body text-white/70">
-                            AI is applying {marbleInfo[selectedMarble].name} marble to{' '}
+                            AI is applying {getMarbleDisplayName()} marble to{' '}
                             {[
                               surfaceSelection.walls && 'walls',
                               surfaceSelection.floors && 'floors',
@@ -673,7 +1200,7 @@ export default function VisualizeYourSpace() {
                       ) : (
                         <>
                           <Sparkles className="w-5 h-5" />
-                          Apply {marbleInfo[selectedMarble].name} Marble
+                          Apply {getMarbleDisplayName()} Marble
                         </>
                       )}
                     </Button>
@@ -727,7 +1254,7 @@ export default function VisualizeYourSpace() {
                     animate={{ opacity: 1, y: 0 }}
                     className="text-center font-body text-sm text-muted-foreground"
                   >
-                    Drag the slider to compare your original room with the {marbleInfo[selectedMarble].name} marble transformation
+                    Drag the slider to compare your original room with the {getMarbleDisplayName()} marble transformation
                   </motion.p>
                 )}
               </motion.div>
