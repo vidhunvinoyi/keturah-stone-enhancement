@@ -72,3 +72,7 @@
 - [x] Implement search/filter functionality for marble library
 - [x] Write unit tests for list, update, and delete endpoints
 - [x] Test complete library management flow end-to-end
+
+
+## Bug Fixes (Completed)
+- [x] Fix "Add Custom Marble" button not opening modal when clicked - Modal now accessible from upload zone before uploading an image

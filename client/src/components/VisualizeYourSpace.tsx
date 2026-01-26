@@ -667,6 +667,20 @@ export default function VisualizeYourSpace() {
                     )}
                   </div>
                 </div>
+                {/* Add Custom Marble Button - Available before upload */}
+                <div className="flex justify-center mt-6">
+                  <Button
+                    variant="outline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowCustomMarbleForm(true);
+                    }}
+                    className="gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Custom Marble
+                  </Button>
+                </div>
               </motion.div>
             ) : (
               // Visualization View
@@ -942,202 +956,6 @@ export default function VisualizeYourSpace() {
                   </div>
                 </div>
 
-                {/* Custom Marble Form Modal */}
-                <AnimatePresence>
-                  {showCustomMarbleForm && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      exit={{ opacity: 0 }}
-                      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-                      onClick={() => setShowCustomMarbleForm(false)}
-                    >
-                      <motion.div
-                        initial={{ scale: 0.95, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.95, opacity: 0 }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="bg-card rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
-                      >
-                        <div className="flex items-center justify-between mb-6">
-                          <h3 className="font-display text-xl font-semibold text-foreground">
-                            Add Custom Marble
-                          </h3>
-                          <button
-                            onClick={() => setShowCustomMarbleForm(false)}
-                            className="text-muted-foreground hover:text-foreground"
-                          >
-                            <X className="w-5 h-5" />
-                          </button>
-                        </div>
-
-                        <div className="space-y-4">
-                          {/* Marble Image Upload */}
-                          <div>
-                            <Label htmlFor="marbleImage" className="font-body text-sm">
-                              300 DPI Marble Image *
-                            </Label>
-                            <div
-                              onClick={() => customMarbleInputRef.current?.click()}
-                              className={`mt-2 border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all ${
-                                customMarblePreview
-                                  ? 'border-primary bg-primary/5'
-                                  : 'border-muted-foreground/30 hover:border-primary/50'
-                              }`}
-                            >
-                              {customMarblePreview ? (
-                                <div className="relative">
-                                  <img
-                                    src={customMarblePreview}
-                                    alt="Custom marble preview"
-                                    className="w-full h-32 object-cover rounded-lg"
-                                  />
-                                  <p className="font-body text-xs text-muted-foreground mt-2 text-center">
-                                    Click to change image
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="text-center">
-                                  <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                                  <p className="font-body text-sm text-muted-foreground">
-                                    Upload 300 DPI marble image
-                                  </p>
-                                  <p className="font-body text-xs text-muted-foreground/70 mt-1">
-                                    Max 50MB • JPEG, PNG
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                            <input
-                              ref={customMarbleInputRef}
-                              type="file"
-                              accept="image/*"
-                              onChange={handleCustomMarbleImageSelect}
-                              className="hidden"
-                            />
-                          </div>
-
-                          {/* Marble Name */}
-                          <div>
-                            <Label htmlFor="marbleName" className="font-body text-sm">
-                              Marble Name *
-                            </Label>
-                            <Input
-                              id="marbleName"
-                              value={customMarbleForm.name}
-                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, name: e.target.value }))}
-                              placeholder="e.g., Calacatta Gold"
-                              className="mt-1"
-                            />
-                          </div>
-
-                          {/* Origin */}
-                          <div>
-                            <Label htmlFor="marbleOrigin" className="font-body text-sm">
-                              Origin / Quarry Location
-                            </Label>
-                            <Input
-                              id="marbleOrigin"
-                              value={customMarbleForm.origin}
-                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, origin: e.target.value }))}
-                              placeholder="e.g., Carrara, Italy"
-                              className="mt-1"
-                            />
-                          </div>
-
-                          {/* Base Color */}
-                          <div>
-                            <Label htmlFor="marbleColor" className="font-body text-sm">
-                              Base Color
-                            </Label>
-                            <Input
-                              id="marbleColor"
-                              value={customMarbleForm.baseColor}
-                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, baseColor: e.target.value }))}
-                              placeholder="e.g., Warm white with gold undertones"
-                              className="mt-1"
-                            />
-                          </div>
-
-                          {/* Veining Pattern */}
-                          <div>
-                            <Label htmlFor="marbleVeining" className="font-body text-sm">
-                              Veining Pattern
-                            </Label>
-                            <Input
-                              id="marbleVeining"
-                              value={customMarbleForm.veiningPattern}
-                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, veiningPattern: e.target.value }))}
-                              placeholder="e.g., Bold gold and gray veining"
-                              className="mt-1"
-                            />
-                          </div>
-
-                          {/* Description */}
-                          <div>
-                            <Label htmlFor="marbleDescription" className="font-body text-sm">
-                              Description
-                            </Label>
-                            <Textarea
-                              id="marbleDescription"
-                              value={customMarbleForm.description}
-                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, description: e.target.value }))}
-                              placeholder="Describe the marble characteristics..."
-                              className="mt-1"
-                              rows={3}
-                            />
-                          </div>
-
-                          {/* Google Drive Link */}
-                          <div>
-                            <Label htmlFor="marbleGoogleDrive" className="font-body text-sm">
-                              Google Drive Link (Optional)
-                            </Label>
-                            <Input
-                              id="marbleGoogleDrive"
-                              value={customMarbleForm.googleDriveLink}
-                              onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, googleDriveLink: e.target.value }))}
-                              placeholder="https://drive.google.com/..."
-                              className="mt-1"
-                            />
-                            <p className="font-body text-xs text-muted-foreground mt-1">
-                              Link to full-resolution marble image collection
-                            </p>
-                          </div>
-
-                          {/* Submit Button */}
-                          <div className="flex gap-3 pt-4">
-                            <Button
-                              variant="outline"
-                              onClick={() => setShowCustomMarbleForm(false)}
-                              className="flex-1"
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              onClick={handleCreateCustomMarble}
-                              disabled={isCreatingCustomMarble || !customMarbleForm.name || !customMarbleFile}
-                              className="flex-1"
-                            >
-                              {isCreatingCustomMarble ? (
-                                <>
-                                  <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                                  Creating...
-                                </>
-                              ) : (
-                                <>
-                                  <Plus className="w-4 h-4 mr-2" />
-                                  Add Marble
-                                </>
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                      </motion.div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-
                 {/* Image Display */}
                 <div className="relative rounded-2xl overflow-hidden bg-card shadow-xl">
                   {hasTransformation ? (
@@ -1264,6 +1082,202 @@ export default function VisualizeYourSpace() {
                     Drag the slider to compare your original room with the {getMarbleDisplayName()} marble transformation
                   </motion.p>
                 )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Custom Marble Form Modal - Moved outside conditional for global access */}
+          <AnimatePresence>
+            {showCustomMarbleForm && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+                onClick={() => setShowCustomMarbleForm(false)}
+              >
+                <motion.div
+                  initial={{ scale: 0.95, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.95, opacity: 0 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-card rounded-2xl p-6 max-w-lg w-full max-h-[90vh] overflow-y-auto shadow-2xl"
+                >
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-display text-xl font-semibold text-foreground">
+                      Add Custom Marble
+                    </h3>
+                    <button
+                      onClick={() => setShowCustomMarbleForm(false)}
+                      className="text-muted-foreground hover:text-foreground"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="space-y-4">
+                    {/* Marble Image Upload */}
+                    <div>
+                      <Label htmlFor="marbleImage" className="font-body text-sm">
+                        300 DPI Marble Image *
+                      </Label>
+                      <div
+                        onClick={() => customMarbleInputRef.current?.click()}
+                        className={`mt-2 border-2 border-dashed rounded-xl p-6 cursor-pointer transition-all ${
+                          customMarblePreview
+                            ? 'border-primary bg-primary/5'
+                            : 'border-muted-foreground/30 hover:border-primary/50'
+                        }`}
+                      >
+                        {customMarblePreview ? (
+                          <div className="relative">
+                            <img
+                              src={customMarblePreview}
+                              alt="Custom marble preview"
+                              className="w-full h-32 object-cover rounded-lg"
+                            />
+                            <p className="font-body text-xs text-muted-foreground mt-2 text-center">
+                              Click to change image
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="text-center">
+                            <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                            <p className="font-body text-sm text-muted-foreground">
+                              Upload 300 DPI marble image
+                            </p>
+                            <p className="font-body text-xs text-muted-foreground/70 mt-1">
+                              Max 50MB • JPEG, PNG
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        ref={customMarbleInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleCustomMarbleImageSelect}
+                        className="hidden"
+                      />
+                    </div>
+
+                    {/* Marble Name */}
+                    <div>
+                      <Label htmlFor="marbleName" className="font-body text-sm">
+                        Marble Name *
+                      </Label>
+                      <Input
+                        id="marbleName"
+                        value={customMarbleForm.name}
+                        onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, name: e.target.value }))}
+                        placeholder="e.g., Calacatta Gold"
+                        className="mt-1"
+                      />
+                    </div>
+
+                    {/* Origin */}
+                    <div>
+                      <Label htmlFor="marbleOrigin" className="font-body text-sm">
+                        Origin / Quarry Location
+                      </Label>
+                      <Input
+                        id="marbleOrigin"
+                        value={customMarbleForm.origin}
+                        onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, origin: e.target.value }))}
+                        placeholder="e.g., Carrara, Italy"
+                        className="mt-1"
+                      />
+                    </div>
+
+                    {/* Base Color */}
+                    <div>
+                      <Label htmlFor="marbleColor" className="font-body text-sm">
+                        Base Color
+                      </Label>
+                      <Input
+                        id="marbleColor"
+                        value={customMarbleForm.baseColor}
+                        onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, baseColor: e.target.value }))}
+                        placeholder="e.g., Warm white with gold undertones"
+                        className="mt-1"
+                      />
+                    </div>
+
+                    {/* Veining Pattern */}
+                    <div>
+                      <Label htmlFor="marbleVeining" className="font-body text-sm">
+                        Veining Pattern
+                      </Label>
+                      <Input
+                        id="marbleVeining"
+                        value={customMarbleForm.veiningPattern}
+                        onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, veiningPattern: e.target.value }))}
+                        placeholder="e.g., Bold gold and gray veining"
+                        className="mt-1"
+                      />
+                    </div>
+
+                    {/* Description */}
+                    <div>
+                      <Label htmlFor="marbleDescription" className="font-body text-sm">
+                        Description
+                      </Label>
+                      <Textarea
+                        id="marbleDescription"
+                        value={customMarbleForm.description}
+                        onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, description: e.target.value }))}
+                        placeholder="Describe the marble characteristics..."
+                        className="mt-1"
+                        rows={3}
+                      />
+                    </div>
+
+                    {/* Google Drive Link */}
+                    <div>
+                      <Label htmlFor="marbleGoogleDrive" className="font-body text-sm">
+                        Google Drive Link (Optional)
+                      </Label>
+                      <Input
+                        id="marbleGoogleDrive"
+                        value={customMarbleForm.googleDriveLink}
+                        onChange={(e) => setCustomMarbleForm(prev => ({ ...prev, googleDriveLink: e.target.value }))}
+                        placeholder="https://drive.google.com/..."
+                        className="mt-1"
+                      />
+                      <p className="font-body text-xs text-muted-foreground mt-1">
+                        Link to full-resolution marble image collection
+                      </p>
+                    </div>
+
+                    {/* Submit Button */}
+                    <div className="flex gap-3 pt-4">
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowCustomMarbleForm(false)}
+                        className="flex-1"
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={handleCreateCustomMarble}
+                        disabled={isCreatingCustomMarble || !customMarbleForm.name || !customMarbleFile}
+                        className="flex-1"
+                      >
+                        {isCreatingCustomMarble ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="w-4 h-4 mr-2" />
+                            Add Marble
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
               </motion.div>
             )}
           </AnimatePresence>
