@@ -20,10 +20,12 @@ import {
   AlertCircle,
   Plus,
   ExternalLink,
-  Palette
+  Palette,
+  PenTool
 } from 'lucide-react';
 import { trpc } from '@/lib/trpc';
 import ImageComparisonSlider from './ImageComparisonSlider';
+import SurfaceBoundaryEditor, { type SurfaceBoundary } from './SurfaceBoundaryEditor';
 import { marbleInfo, type MarbleType } from '@/data/galleryData';
 import { Link } from 'wouter';
 
@@ -117,6 +119,8 @@ export default function VisualizeYourSpace() {
   });
   const [showSampleUpload, setShowSampleUpload] = useState(false);
   const [showCustomMarbleForm, setShowCustomMarbleForm] = useState(false);
+  const [showBoundaryEditor, setShowBoundaryEditor] = useState(false);
+  const [surfaceBoundaries, setSurfaceBoundaries] = useState<SurfaceBoundary[]>([]);
   const [sampleSurfaceType, setSampleSurfaceType] = useState<'walls' | 'floors' | 'ceilings'>('walls');
   const [customMarbles, setCustomMarbles] = useState<CustomMarble[]>([]);
   
@@ -232,6 +236,57 @@ export default function VisualizeYourSpace() {
         });
       }
 
+      // Generate initial boundaries from detection
+      if (result.detection) {
+        const initialBoundaries: SurfaceBoundary[] = [];
+        const imageWidth = 1920; // Default width, will be adjusted by editor
+        const imageHeight = 1080; // Default height, will be adjusted by editor
+        
+        if (result.detection.walls.detected) {
+          initialBoundaries.push({
+            id: 'walls-initial',
+            type: 'walls',
+            points: [
+              { x: 0, y: imageHeight * 0.1 },
+              { x: imageWidth, y: imageHeight * 0.1 },
+              { x: imageWidth, y: imageHeight * 0.7 },
+              { x: 0, y: imageHeight * 0.7 },
+            ],
+            visible: true,
+          });
+        }
+        
+        if (result.detection.floors.detected) {
+          initialBoundaries.push({
+            id: 'floors-initial',
+            type: 'floors',
+            points: [
+              { x: 0, y: imageHeight * 0.7 },
+              { x: imageWidth, y: imageHeight * 0.7 },
+              { x: imageWidth, y: imageHeight },
+              { x: 0, y: imageHeight },
+            ],
+            visible: true,
+          });
+        }
+        
+        if (result.detection.ceilings.detected) {
+          initialBoundaries.push({
+            id: 'ceilings-initial',
+            type: 'ceilings',
+            points: [
+              { x: 0, y: 0 },
+              { x: imageWidth, y: 0 },
+              { x: imageWidth, y: imageHeight * 0.1 },
+              { x: 0, y: imageHeight * 0.1 },
+            ],
+            visible: true,
+          });
+        }
+        
+        setSurfaceBoundaries(initialBoundaries);
+      }
+
       if (!result.detection.canAutoDetect) {
         toast.info('Some surfaces may need manual identification. You can upload a material sample for better accuracy.');
         setShowSampleUpload(true);
@@ -270,6 +325,28 @@ export default function VisualizeYourSpace() {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handleOpenBoundaryEditor = () => {
+    setShowBoundaryEditor(true);
+  };
+
+  const handleBoundarySave = (boundaries: SurfaceBoundary[]) => {
+    setSurfaceBoundaries(boundaries);
+    setShowBoundaryEditor(false);
+    
+    // Update surface selection based on boundaries
+    const hasWalls = boundaries.some(b => b.type === 'walls' && b.visible);
+    const hasFloors = boundaries.some(b => b.type === 'floors' && b.visible);
+    const hasCeilings = boundaries.some(b => b.type === 'ceilings' && b.visible);
+    
+    setSurfaceSelection({
+      walls: hasWalls,
+      floors: hasFloors,
+      ceilings: hasCeilings,
+    });
+    
+    toast.success('Surface boundaries updated!');
   };
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
@@ -720,16 +797,28 @@ export default function VisualizeYourSpace() {
                         </h3>
                       </div>
                       {visualization.surfaceDetection && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleGenerateHighlight}
-                          disabled={isProcessing}
-                          className="text-xs"
-                        >
-                          <Palette className="w-3 h-3 mr-1" />
-                          Show Highlights
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleOpenBoundaryEditor}
+                            disabled={isProcessing}
+                            className="text-xs"
+                          >
+                            <PenTool className="w-3 h-3 mr-1" />
+                            Adjust Boundaries
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleGenerateHighlight}
+                            disabled={isProcessing}
+                            className="text-xs"
+                          >
+                            <Palette className="w-3 h-3 mr-1" />
+                            Show Highlights
+                          </Button>
+                        </div>
                       )}
                     </div>
                     
@@ -1283,6 +1372,18 @@ export default function VisualizeYourSpace() {
           </AnimatePresence>
         </div>
       </div>
+
+      {/* Surface Boundary Editor Modal */}
+      <AnimatePresence>
+        {showBoundaryEditor && visualization && (
+          <SurfaceBoundaryEditor
+            imageUrl={visualization.originalImageUrl}
+            initialBoundaries={surfaceBoundaries}
+            onSave={handleBoundarySave}
+            onCancel={() => setShowBoundaryEditor(false)}
+          />
+        )}
+      </AnimatePresence>
     </section>
   );
 }

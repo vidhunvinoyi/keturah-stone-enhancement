@@ -627,6 +627,16 @@ IMPORTANT INSTRUCTIONS:
           ceilings: z.boolean().default(false),
         }),
         useMaterialSample: z.boolean().default(false),
+        // Custom boundary coordinates for precise surface selection
+        customBoundaries: z.array(z.object({
+          id: z.string(),
+          type: z.enum(["walls", "floors", "ceilings"]),
+          points: z.array(z.object({
+            x: z.number(),
+            y: z.number(),
+          })),
+          visible: z.boolean(),
+        })).optional(),
       }))
       .mutation(async ({ input }) => {
         const visualization = await getMarbleVisualizationById(input.visualizationId);
@@ -667,6 +677,17 @@ IMPORTANT INSTRUCTIONS:
             venatino: "Venatino marble from Carrara, Italy - a pristine white base with delicate gray-green veining patterns",
           };
 
+          // Add custom boundary context if provided
+          let boundaryContext = "";
+          if (input.customBoundaries && input.customBoundaries.length > 0) {
+            const visibleBoundaries = input.customBoundaries.filter(b => b.visible);
+            if (visibleBoundaries.length > 0) {
+              boundaryContext = `\n\nThe user has manually defined specific regions for each surface type. Focus the marble replacement precisely within these user-defined boundaries:\n${visibleBoundaries.map(b => 
+                `- ${b.type}: User-defined polygon region with ${b.points.length} vertices`
+              ).join("\n")}`;
+            }
+          }
+
           const prompt = `Transform this interior image by replacing the stone, marble, or travertine surfaces ONLY on the following: ${surfaceList}.
 
 Replace these surfaces with ${marbleDescriptions[input.marbleType]}.
@@ -676,7 +697,7 @@ IMPORTANT INSTRUCTIONS:
 - Maintain the exact same composition, lighting, shadows, reflections, and perspective
 - Preserve all furniture, fixtures, decorations, and architectural details
 - The result should be photorealistic with natural marble texture and veining
-- Match the scale and direction of the marble veining appropriately for each surface${materialContext}`;
+- Match the scale and direction of the marble veining appropriately for each surface${materialContext}${boundaryContext}`;
 
           const result = await generateImage({
             prompt,

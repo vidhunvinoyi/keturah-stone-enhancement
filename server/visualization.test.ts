@@ -877,3 +877,182 @@ describe("visualization.process (backward compatibility)", () => {
     ).rejects.toThrow("Visualization not found");
   });
 });
+
+
+describe("visualization.processSelective with custom boundaries", () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    // Reset image generation mock
+    const imageGenModule = await import("./_core/imageGeneration");
+    vi.mocked(imageGenModule.generateImage).mockResolvedValue({
+      url: "https://example.com/processed-with-boundaries.jpg",
+    });
+  });
+
+  it("processes an image with custom boundary coordinates", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const customBoundaries = [
+      {
+        id: "walls-custom",
+        type: "walls" as const,
+        points: [
+          { x: 0, y: 100 },
+          { x: 800, y: 100 },
+          { x: 800, y: 500 },
+          { x: 0, y: 500 },
+        ],
+        visible: true,
+      },
+      {
+        id: "floors-custom",
+        type: "floors" as const,
+        points: [
+          { x: 0, y: 500 },
+          { x: 800, y: 500 },
+          { x: 800, y: 600 },
+          { x: 0, y: 600 },
+        ],
+        visible: true,
+      },
+    ];
+
+    const result = await caller.visualization.processSelective({
+      visualizationId: 1,
+      marbleType: "bardiglio",
+      surfaces: {
+        walls: true,
+        floors: true,
+        ceilings: false,
+      },
+      customBoundaries,
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("marbleType", "bardiglio");
+    expect(result).toHaveProperty("imageUrl");
+    expect(result.status).toBe("completed");
+  });
+
+  it("processes an image with only visible boundaries", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const customBoundaries = [
+      {
+        id: "walls-custom",
+        type: "walls" as const,
+        points: [
+          { x: 0, y: 100 },
+          { x: 800, y: 100 },
+          { x: 800, y: 500 },
+          { x: 0, y: 500 },
+        ],
+        visible: true,
+      },
+      {
+        id: "floors-custom",
+        type: "floors" as const,
+        points: [
+          { x: 0, y: 500 },
+          { x: 800, y: 500 },
+          { x: 800, y: 600 },
+          { x: 0, y: 600 },
+        ],
+        visible: false, // Hidden boundary should be ignored
+      },
+    ];
+
+    const result = await caller.visualization.processSelective({
+      visualizationId: 1,
+      marbleType: "venatino",
+      surfaces: {
+        walls: true,
+        floors: false,
+        ceilings: false,
+      },
+      customBoundaries,
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("marbleType", "venatino");
+    expect(result.status).toBe("completed");
+  });
+
+  it("processes an image without custom boundaries (backward compatible)", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const result = await caller.visualization.processSelective({
+      visualizationId: 1,
+      marbleType: "bardiglio",
+      surfaces: {
+        walls: true,
+        floors: true,
+        ceilings: false,
+      },
+      // No customBoundaries provided
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result).toHaveProperty("marbleType", "bardiglio");
+    expect(result.status).toBe("completed");
+  });
+
+  it("handles complex polygon boundaries with multiple vertices", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    const customBoundaries = [
+      {
+        id: "walls-complex",
+        type: "walls" as const,
+        points: [
+          { x: 50, y: 100 },
+          { x: 200, y: 80 },
+          { x: 400, y: 120 },
+          { x: 600, y: 90 },
+          { x: 750, y: 110 },
+          { x: 750, y: 450 },
+          { x: 600, y: 480 },
+          { x: 400, y: 440 },
+          { x: 200, y: 470 },
+          { x: 50, y: 460 },
+        ],
+        visible: true,
+      },
+    ];
+
+    const result = await caller.visualization.processSelective({
+      visualizationId: 1,
+      marbleType: "bardiglio",
+      surfaces: {
+        walls: true,
+        floors: false,
+        ceilings: false,
+      },
+      customBoundaries,
+    });
+
+    expect(result).toHaveProperty("id", 1);
+    expect(result.status).toBe("completed");
+  });
+
+  it("throws error when no surfaces are selected", async () => {
+    const ctx = createPublicContext();
+    const caller = appRouter.createCaller(ctx);
+
+    await expect(
+      caller.visualization.processSelective({
+        visualizationId: 1,
+        marbleType: "bardiglio",
+        surfaces: {
+          walls: false,
+          floors: false,
+          ceilings: false,
+        },
+      })
+    ).rejects.toThrow("Please select at least one surface to transform");
+  });
+});

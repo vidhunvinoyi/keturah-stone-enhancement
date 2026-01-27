@@ -76,3 +76,18 @@
 
 ## Bug Fixes (Completed)
 - [x] Fix "Add Custom Marble" button not opening modal when clicked - Modal now accessible from upload zone before uploading an image
+
+
+## Surface Boundary Adjustment Feature (Completed)
+- [x] Create interactive canvas overlay component for boundary editing
+- [x] Implement polygon drawing tool for custom surface selection
+- [x] Add draggable control points to adjust AI-detected boundaries
+- [x] Create color-coded overlays for each surface type (walls, floors, ceilings)
+- [x] Implement undo/redo functionality for boundary adjustments
+- [x] Add "Reset to AI Detection" button to restore original boundaries
+- [x] Create zoom and pan controls for precise editing
+- [x] Update backend to accept custom boundary polygon coordinates
+- [x] Store adjusted boundaries in database for processing
+- [x] Integrate boundary editor into the visualization workflow
+- [x] Write unit tests for boundary adjustment feature (37 tests passing)
+- [x] Test complete boundary editing and replacement flow
