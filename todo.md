@@ -91,3 +91,20 @@
 - [x] Integrate boundary editor into the visualization workflow
 - [x] Write unit tests for boundary adjustment feature (37 tests passing)
 - [x] Test complete boundary editing and replacement flow
+
+
+## Bug Fixes (Verified)
+- [x] Fix "Add Custom Marble" form submission - VERIFIED WORKING
+  - Modal opens correctly from upload zone
+  - Image upload works via file input
+  - Form validation requires image + name
+  - Backend creates marble successfully
+  - AI analyzes marble characteristics
+  - Marble appears in library
+
+## Comprehensive Testing (Completed)
+- [x] All 37 unit tests passing
+- [x] Gallery filtering by category working
+- [x] Before/after comparison sliders working
+- [x] Custom marble creation and library management working
+- [x] Surface detection and boundary adjustment working

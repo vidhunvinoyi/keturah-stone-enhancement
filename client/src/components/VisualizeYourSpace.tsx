@@ -1238,15 +1238,19 @@ export default function VisualizeYourSpace() {
                             <p className="font-body text-xs text-muted-foreground/70 mt-1">
                               Max 50MB • JPEG, PNG
                             </p>
+                            <p className="font-body text-xs text-destructive mt-2">
+                              Required - Click to upload
+                            </p>
                           </div>
                         )}
                       </div>
                       <input
                         ref={customMarbleInputRef}
+                        id="customMarbleFileInput"
                         type="file"
-                        accept="image/*"
+                        accept="image/jpeg,image/png"
                         onChange={handleCustomMarbleImageSelect}
-                        className="hidden"
+                        style={{ display: 'none' }}
                       />
                     </div>
 
@@ -1349,8 +1353,9 @@ export default function VisualizeYourSpace() {
                       </Button>
                       <Button
                         onClick={handleCreateCustomMarble}
-                        disabled={isCreatingCustomMarble || !customMarbleForm.name || !customMarbleFile}
-                        className="flex-1"
+                        disabled={isCreatingCustomMarble || !customMarbleForm.name.trim() || !customMarbleFile}
+                        className={`flex-1 ${(!customMarbleForm.name.trim() || !customMarbleFile) ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        title={!customMarbleFile ? 'Please upload a 300 DPI marble image first' : !customMarbleForm.name.trim() ? 'Please enter a marble name' : 'Add this marble to your library'}
                       >
                         {isCreatingCustomMarble ? (
                           <>
