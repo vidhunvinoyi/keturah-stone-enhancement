@@ -47,7 +47,7 @@ interface CustomMarble {
   baseColor: string | null;
   veiningPattern: string | null;
   description: string | null;
-  imageUrl: string;
+  imageUrl: string | null;
   thumbnailUrl: string | null;
   googleDriveLink: string | null;
   marbleAnalysis: string | null;
@@ -68,6 +68,7 @@ export default function MarbleLibrary() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingMarble, setEditingMarble] = useState<CustomMarble | null>(null);
   const [deletingMarble, setDeletingMarble] = useState<CustomMarble | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [editForm, setEditForm] = useState({
     name: '',
     origin: '',
@@ -103,6 +104,21 @@ export default function MarbleLibrary() {
       toast.error(`Failed to delete marble: ${error.message}`);
     },
   });
+
+  // Import presets mutation
+  const importPresetsMutation = trpc.customMarble.importPresets.useMutation({
+    onSuccess: (data) => {
+      toast.success(`Imported ${data.totalImported} marbles from Keturah Study`);
+      setShowImportDialog(false);
+      refetch();
+    },
+    onError: (error) => {
+      toast.error(`Failed to import presets: ${error.message}`);
+    },
+  });
+
+  // Get available presets
+  const { data: presets } = trpc.customMarble.getPresets.useQuery();
 
   // Filter marbles based on search query
   const filteredMarbles = marbles?.filter((marble) => {
@@ -169,12 +185,22 @@ export default function MarbleLibrary() {
               </p>
             </div>
           </div>
-          <Link href="/#visualize">
-            <Button className="gap-2">
-              <Plus className="w-4 h-4" />
-              Add New Marble
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="outline" 
+              className="gap-2"
+              onClick={() => setShowImportDialog(true)}
+            >
+              <FolderOpen className="w-4 h-4" />
+              Import from Study
             </Button>
-          </Link>
+            <Link href="/#visualize">
+              <Button className="gap-2">
+                <Plus className="w-4 h-4" />
+                Add New Marble
+              </Button>
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -254,11 +280,20 @@ export default function MarbleLibrary() {
                 >
                   {/* Marble Image */}
                   <div className="relative aspect-square overflow-hidden">
-                    <img
-                      src={marble.thumbnailUrl || marble.imageUrl}
-                      alt={marble.name}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
+                    {(marble.thumbnailUrl || marble.imageUrl) ? (
+                      <img
+                        src={marble.thumbnailUrl || marble.imageUrl || undefined}
+                        alt={marble.name}
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
+                        <div className="text-center">
+                          <Palette className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                          <span className="text-sm text-gray-500">No Image</span>
+                        </div>
+                      </div>
+                    )}
                     
                     {/* Overlay Actions */}
                     <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center gap-3">
@@ -359,11 +394,20 @@ export default function MarbleLibrary() {
             {/* Preview Image */}
             {editingMarble && (
               <div className="w-full aspect-video rounded-lg overflow-hidden bg-muted">
-                <img
-                  src={editingMarble.imageUrl}
-                  alt={editingMarble.name}
-                  className="w-full h-full object-cover"
-                />
+                {editingMarble.imageUrl ? (
+                  <img
+                    src={editingMarble.imageUrl}
+                    alt={editingMarble.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200">
+                    <div className="text-center">
+                      <Palette className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                      <span className="text-sm text-gray-500">Preset Marble - No Image</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -478,6 +522,79 @@ export default function MarbleLibrary() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import from Study Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-primary" />
+              Import Marbles from Keturah Study
+            </DialogTitle>
+            <DialogDescription>
+              Import pre-defined marble types from the MaterialChangingStudy.pdf document. These marbles are used in the Keturah Reserve Townhouses project.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4">
+            {/* Preset Marbles List */}
+            <div className="space-y-4">
+              {presets?.presets?.map((preset) => (
+                <div 
+                  key={preset.name}
+                  className="flex items-start gap-4 p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
+                >
+                  <div 
+                    className="w-12 h-12 rounded-lg flex-shrink-0 border"
+                    style={{ backgroundColor: preset.baseColor.toLowerCase().includes('white') ? '#f5f5f5' : preset.baseColor.toLowerCase().includes('gray') ? '#9ca3af' : preset.baseColor.toLowerCase().includes('black') ? '#1f2937' : '#e5e7eb' }}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-foreground">{preset.name}</h4>
+                    <p className="text-sm text-muted-foreground">{preset.origin}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      <span className="font-medium">Color:</span> {preset.baseColor} | 
+                      <span className="font-medium"> Veining:</span> {preset.veiningPattern}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+                      {preset.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {!presets?.presets?.length && (
+              <div className="text-center py-8 text-muted-foreground">
+                <Palette className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                <p>No preset marbles available</p>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowImportDialog(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => importPresetsMutation.mutate({ selectedMarbles: presets?.presets?.map(p => p.key as 'bardiglio' | 'statuarietto' | 'venato' | 'portoro_white' | 'portoro_gold') || [] })}
+              disabled={importPresetsMutation.isPending || !presets?.presets?.length}
+              className="gap-2"
+            >
+              {importPresetsMutation.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Importing...
+                </>
+              ) : (
+                <>
+                  <FolderOpen className="w-4 h-4" />
+                  Import All ({presets?.presets?.length || 0} Marbles)
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

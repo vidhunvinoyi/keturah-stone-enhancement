@@ -278,6 +278,210 @@ export const appRouter = router({
           status: "deleted" as const,
         };
       }),
+
+    // Import preset marbles from MaterialChangingStudy.pdf
+    importPresets: publicProcedure
+      .input(z.object({
+        selectedMarbles: z.array(z.enum(["bardiglio", "statuarietto", "venato", "portoro_white", "portoro_gold"])),
+        ownerId: z.string().optional(),
+      }))
+      .mutation(async ({ input }) => {
+        const ownerId = input.ownerId || nanoid();
+        
+        // Preset marble data from MaterialChangingStudy.pdf analysis
+        const presetMarbles = {
+          bardiglio: {
+            name: "Bardiglio",
+            origin: "Carrara, Italy",
+            baseColor: "Blue-gray",
+            veiningPattern: "White diagonal veining with subtle gray undertones",
+            description: "A sophisticated Italian marble with a distinctive blue-gray base and elegant white veining. Ideal for flooring applications where a dramatic yet refined look is desired. The cool tones create a contemporary atmosphere while maintaining timeless elegance.",
+            marbleAnalysis: JSON.stringify({
+              baseColor: "Blue-gray with cool undertones",
+              veiningColors: ["White", "Light gray", "Silver"],
+              veiningPattern: "Diagonal flowing veins with medium intensity",
+              texture: "Polished smooth surface with natural depth",
+              characteristics: "Cool-toned marble with sophisticated appearance, excellent for modern luxury interiors",
+              suggestedApplications: ["floors", "walls", "countertops"],
+            }),
+          },
+          statuarietto: {
+            name: "Statuarietto",
+            origin: "Carrara, Italy",
+            baseColor: "White/Light gray",
+            veiningPattern: "Subtle gray veining with delicate patterns",
+            description: "A premium white Italian marble with refined gray veining. Perfect for wall applications where a clean, luminous aesthetic is desired. The subtle veining adds visual interest without overwhelming the space.",
+            marbleAnalysis: JSON.stringify({
+              baseColor: "Bright white with warm undertones",
+              veiningColors: ["Light gray", "Soft gray", "Pale silver"],
+              veiningPattern: "Delicate, subtle veining with fine lines",
+              texture: "Highly polished with luminous quality",
+              characteristics: "Elegant white marble ideal for creating bright, sophisticated spaces",
+              suggestedApplications: ["walls", "ceilings", "bathroom surfaces"],
+            }),
+          },
+          venato: {
+            name: "Venato (Venatino)",
+            origin: "Carrara, Italy",
+            baseColor: "White/Cream",
+            veiningPattern: "Gray diagonal veining with linear flow",
+            description: "A classic Italian marble featuring a warm white/cream base with distinctive gray diagonal veining. The linear vein pattern creates a sense of movement and adds architectural interest to any surface.",
+            marbleAnalysis: JSON.stringify({
+              baseColor: "Warm white to cream",
+              veiningColors: ["Medium gray", "Dark gray", "Charcoal accents"],
+              veiningPattern: "Bold diagonal veins with linear directional flow",
+              texture: "Smooth polished finish with natural variation",
+              characteristics: "Dynamic veining pattern creates visual movement, excellent for feature walls",
+              suggestedApplications: ["walls", "floors", "accent features"],
+            }),
+          },
+          portoro_white: {
+            name: "Portoro White",
+            origin: "Italy",
+            baseColor: "White",
+            veiningPattern: "Dramatic black veining with bold contrast",
+            description: "A striking marble featuring a pristine white base with dramatic black veining. The high contrast creates a bold, luxurious statement perfect for bathroom walls and floors where maximum visual impact is desired.",
+            marbleAnalysis: JSON.stringify({
+              baseColor: "Pure white",
+              veiningColors: ["Black", "Dark charcoal", "Deep gray"],
+              veiningPattern: "Bold dramatic veining with high contrast",
+              texture: "Polished mirror-like finish",
+              characteristics: "High-contrast marble for dramatic luxury statements",
+              suggestedApplications: ["bathroom walls", "bathroom floors", "feature walls"],
+            }),
+          },
+          portoro_gold: {
+            name: "Portoro Gold",
+            origin: "Italy",
+            baseColor: "Black/Dark",
+            veiningPattern: "Gold and white veining on dark background",
+            description: "An opulent marble with a deep black base highlighted by striking gold and white veining. This luxurious stone creates an unmistakable statement of elegance, ideal for bathroom accents and feature areas.",
+            marbleAnalysis: JSON.stringify({
+              baseColor: "Deep black with warm undertones",
+              veiningColors: ["Gold", "Warm white", "Amber"],
+              veiningPattern: "Bold gold veining with white accents",
+              texture: "High-gloss polished finish",
+              characteristics: "Ultra-luxurious marble with precious metal appearance",
+              suggestedApplications: ["bathroom accents", "feature walls", "luxury surfaces"],
+            }),
+          },
+        };
+
+        const importedMarbles = [];
+        
+        for (const marbleKey of input.selectedMarbles) {
+          const preset = presetMarbles[marbleKey];
+          
+          // Check if this marble already exists for the owner
+          const existingMarbles = await getAllCustomMarbles();
+          const alreadyExists = existingMarbles.some(
+            m => m.name.toLowerCase() === preset.name.toLowerCase()
+          );
+          
+          if (alreadyExists) {
+            importedMarbles.push({
+              name: preset.name,
+              status: "skipped" as const,
+              reason: "Already exists in library",
+            });
+            continue;
+          }
+          
+          // Create the preset marble (without image - user can add later)
+          const id = await createCustomMarble({
+            ownerId,
+            name: preset.name,
+            origin: preset.origin,
+            baseColor: preset.baseColor,
+            veiningPattern: preset.veiningPattern,
+            description: preset.description,
+            imageUrl: null, // Preset marbles don't have images initially
+            googleDriveLink: null,
+            marbleAnalysis: preset.marbleAnalysis,
+            isPublic: "true", // Preset marbles are public
+          });
+          
+          importedMarbles.push({
+            id,
+            name: preset.name,
+            status: "imported" as const,
+          });
+        }
+        
+        return {
+          ownerId,
+          imported: importedMarbles,
+          totalImported: importedMarbles.filter(m => m.status === "imported").length,
+          totalSkipped: importedMarbles.filter(m => m.status === "skipped").length,
+        };
+      }),
+
+    // Get available preset marbles for import
+    getPresets: publicProcedure
+      .query(async () => {
+        // Check which presets are already imported
+        const existingMarbles = await getAllCustomMarbles();
+        const existingNames = existingMarbles.map(m => m.name.toLowerCase());
+        
+        const presets = [
+          {
+            key: "bardiglio",
+            name: "Bardiglio",
+            origin: "Carrara, Italy",
+            baseColor: "Blue-gray",
+            veiningPattern: "White diagonal veining",
+            description: "Sophisticated blue-gray marble ideal for flooring",
+            application: "Flooring (Overall)",
+            alreadyImported: existingNames.includes("bardiglio"),
+          },
+          {
+            key: "statuarietto",
+            name: "Statuarietto",
+            origin: "Carrara, Italy",
+            baseColor: "White/Light gray",
+            veiningPattern: "Subtle gray veining",
+            description: "Premium white marble perfect for walls",
+            application: "Walls (Overall)",
+            alreadyImported: existingNames.includes("statuarietto"),
+          },
+          {
+            key: "venato",
+            name: "Venato (Venatino)",
+            origin: "Carrara, Italy",
+            baseColor: "White/Cream",
+            veiningPattern: "Gray diagonal veining",
+            description: "Classic marble with distinctive linear veining",
+            application: "Walls (Accent)",
+            alreadyImported: existingNames.includes("venato (venatino)"),
+          },
+          {
+            key: "portoro_white",
+            name: "Portoro White",
+            origin: "Italy",
+            baseColor: "White",
+            veiningPattern: "Dramatic black veining",
+            description: "High-contrast marble for bold statements",
+            application: "Bathroom Walls/Floors",
+            alreadyImported: existingNames.includes("portoro white"),
+          },
+          {
+            key: "portoro_gold",
+            name: "Portoro Gold",
+            origin: "Italy",
+            baseColor: "Black/Dark",
+            veiningPattern: "Gold and white veining",
+            description: "Opulent marble with precious metal appearance",
+            application: "Bathroom Accents",
+            alreadyImported: existingNames.includes("portoro gold"),
+          },
+        ];
+        
+        return {
+          presets,
+          source: "MaterialChangingStudy.pdf - Keturah Reserve Townhouses",
+          architect: "Dewan Architects + Engineers",
+        };
+      }),
   }),
 
   // Marble Visualization Router
@@ -570,18 +774,24 @@ IMPORTANT INSTRUCTIONS:
 - The result should be photorealistic with natural marble texture and veining
 - Match the scale and direction of the marble veining appropriately for each surface${materialContext}`;
 
+          // Build original images array - only include custom marble image if available
+          const originalImages: Array<{ url: string; mimeType: string }> = [
+            {
+              url: visualization.originalImageUrl,
+              mimeType: "image/jpeg",
+            },
+          ];
+          
+          if (customMarble.imageUrl) {
+            originalImages.push({
+              url: customMarble.imageUrl,
+              mimeType: "image/jpeg",
+            });
+          }
+
           const result = await generateImage({
             prompt,
-            originalImages: [
-              {
-                url: visualization.originalImageUrl,
-                mimeType: "image/jpeg",
-              },
-              {
-                url: customMarble.imageUrl,
-                mimeType: "image/jpeg",
-              },
-            ],
+            originalImages,
           });
 
           if (!result.url) {
@@ -601,7 +811,7 @@ IMPORTANT INSTRUCTIONS:
             customMarble: {
               id: customMarble.id,
               name: customMarble.name,
-              imageUrl: customMarble.imageUrl,
+              imageUrl: customMarble.imageUrl || undefined,
             },
             surfaces: input.surfaces,
             status: "completed" as const,

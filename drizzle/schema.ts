@@ -79,7 +79,7 @@ export const customMarbles = mysqlTable("custom_marbles", {
   /** Full description of the marble */
   description: text("description"),
   /** 300 DPI high-resolution marble image URL in S3 */
-  imageUrl: text("imageUrl").notNull(),
+  imageUrl: text("imageUrl"),
   /** Google Drive link to marble image collection */
   googleDriveLink: text("googleDriveLink"),
   /** Thumbnail image URL for preview */

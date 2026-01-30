@@ -108,3 +108,13 @@
 - [x] Before/after comparison sliders working
 - [x] Custom marble creation and library management working
 - [x] Surface detection and boundary adjustment working
+
+
+## Preset Marble Data Import Feature (Completed)
+- [x] Create preset marble data from MaterialChangingStudy.pdf (5 marble types: Bardiglio, Statuarietto, Venato, Portoro White, Portoro Gold)
+- [x] Add backend endpoint to import preset marbles into user's library
+- [x] Build "Import from Study" button in Marble Library page
+- [x] Pre-populate marble details: name, origin, color, veining pattern, description
+- [x] Allow users to select which marbles to import
+- [x] Prevent duplicate imports of same marble type
+- [x] Test import functionality end-to-end - VERIFIED WORKING (5 marbles imported successfully)

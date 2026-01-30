@@ -1,0 +1,1 @@
+ALTER TABLE `custom_marbles` MODIFY COLUMN `imageUrl` text;
