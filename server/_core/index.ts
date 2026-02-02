@@ -31,6 +31,8 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
   // Configure body parser with larger size limit for file uploads
+  // NOTE: This creates a DoS risk (50mb limit). To fix this, we need to switch to Presigned URLs, 
+  // but we currently lack direct S3 credentials/capabilities in this environment.
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
   // OAuth callback under /api/oauth/callback

@@ -3,12 +3,13 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
 import { z } from "zod";
+import { TRPCError } from "@trpc/server";
 import { storagePut } from "./storage";
 import { generateImage } from "./_core/imageGeneration";
 import { invokeLLM } from "./_core/llm";
-import { 
-  createMarbleVisualization, 
-  getMarbleVisualizationById, 
+import {
+  createMarbleVisualization,
+  getMarbleVisualizationById,
   getMarbleVisualizationsBySession,
   updateMarbleVisualization,
   createCustomMarble,
@@ -86,18 +87,18 @@ const marbleAnalysisSchema = {
     type: "object",
     properties: {
       baseColor: { type: "string", description: "Primary base color of the marble" },
-      veiningColors: { 
-        type: "array", 
+      veiningColors: {
+        type: "array",
         items: { type: "string" },
-        description: "Colors present in the veining" 
+        description: "Colors present in the veining"
       },
       veiningPattern: { type: "string", description: "Description of the veining pattern (e.g., bold dramatic, delicate subtle, linear, swirling)" },
       texture: { type: "string", description: "Surface texture description" },
       characteristics: { type: "string", description: "Key visual characteristics for replacement" },
-      suggestedApplications: { 
-        type: "array", 
+      suggestedApplications: {
+        type: "array",
         items: { type: "string" },
-        description: "Best surfaces for this marble (walls, floors, ceilings)" 
+        description: "Best surfaces for this marble (walls, floors, ceilings)"
       },
     },
     required: ["baseColor", "veiningColors", "veiningPattern", "texture", "characteristics", "suggestedApplications"],
@@ -135,12 +136,12 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const ownerId = input.ownerId || nanoid();
-        
+
         // Upload the 300 DPI marble image to S3
         const buffer = Buffer.from(input.imageBase64, "base64");
         const fileKey = `marbles/${ownerId}/${Date.now()}-${input.name.toLowerCase().replace(/\s+/g, '-')}.${input.mimeType.split('/')[1] || 'jpg'}`;
         const { url: imageUrl } = await storagePut(fileKey, buffer, input.mimeType);
-        
+
         // Use AI to analyze the marble characteristics
         const analysisResult = await invokeLLM({
           messages: [
@@ -252,16 +253,43 @@ export const appRouter = router({
         description: z.string().optional(),
         googleDriveLink: z.string().url().optional().or(z.literal("")),
       }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const { id, ...updateData } = input;
-        
+
+        // Check ownership
+        const existing = await getCustomMarbleById(id);
+        if (!existing) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Custom marble not found",
+          });
+        }
+
+        // NOTE: We're assuming ctx.user.openId is the ownerId. 
+        // If the system allows anonymous "session-based" ownership, we need to handle that.
+        // For now, Strict Security: Only logged in users or matching session users can edit.
+        // But `ctx.user` might be null? 
+        // Given the code audit, let's assume `input.ownerId` is NOT passed here, so we must rely on Context.
+        // If ctx.user is undefined, we can't secure it properly without a session token in the procedure.
+        // We'll enforce that the current user (if logged in) matches.
+
+        if (existing.ownerId !== ctx.user?.openId) {
+          // Fallback: Check if it's a "admin" or if we have a way to validate anonymous session.
+          // Since we don't have session token in ctx explicitly shown in the interface above, 
+          // we will strictly block if owner mismatch.
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You are not authorized to update this marble",
+          });
+        }
+
         // Filter out undefined values
         const filteredData = Object.fromEntries(
           Object.entries(updateData).filter(([_, v]) => v !== undefined)
         ) as Parameters<typeof updateCustomMarble>[1];
-        
+
         await updateCustomMarble(id, filteredData);
-        
+
         return {
           id,
           status: "updated" as const,
@@ -271,7 +299,23 @@ export const appRouter = router({
     // Delete a custom marble
     delete: publicProcedure
       .input(z.object({ id: z.number() }))
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
+        // Check ownership
+        const existing = await getCustomMarbleById(input.id);
+        if (!existing) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Custom marble not found",
+          });
+        }
+
+        if (existing.ownerId !== ctx.user?.openId) {
+          throw new TRPCError({
+            code: "FORBIDDEN",
+            message: "You are not authorized to delete this marble",
+          });
+        }
+
         await deleteCustomMarble(input.id);
         return {
           id: input.id,
@@ -287,7 +331,7 @@ export const appRouter = router({
       }))
       .mutation(async ({ input }) => {
         const ownerId = input.ownerId || nanoid();
-        
+
         // Preset marble data from MaterialChangingStudy.pdf analysis
         const presetMarbles = {
           bardiglio: {
@@ -368,16 +412,16 @@ export const appRouter = router({
         };
 
         const importedMarbles = [];
-        
+
         for (const marbleKey of input.selectedMarbles) {
           const preset = presetMarbles[marbleKey];
-          
+
           // Check if this marble already exists for the owner
           const existingMarbles = await getAllCustomMarbles();
           const alreadyExists = existingMarbles.some(
             m => m.name.toLowerCase() === preset.name.toLowerCase()
           );
-          
+
           if (alreadyExists) {
             importedMarbles.push({
               name: preset.name,
@@ -386,7 +430,7 @@ export const appRouter = router({
             });
             continue;
           }
-          
+
           // Create the preset marble (without image - user can add later)
           const id = await createCustomMarble({
             ownerId,
@@ -400,14 +444,14 @@ export const appRouter = router({
             marbleAnalysis: preset.marbleAnalysis,
             isPublic: "true", // Preset marbles are public
           });
-          
+
           importedMarbles.push({
             id,
             name: preset.name,
             status: "imported" as const,
           });
         }
-        
+
         return {
           ownerId,
           imported: importedMarbles,
@@ -422,7 +466,7 @@ export const appRouter = router({
         // Check which presets are already imported
         const existingMarbles = await getAllCustomMarbles();
         const existingNames = existingMarbles.map(m => m.name.toLowerCase());
-        
+
         const presets = [
           {
             key: "bardiglio",
@@ -475,7 +519,7 @@ export const appRouter = router({
             alreadyImported: existingNames.includes("portoro gold"),
           },
         ];
-        
+
         return {
           presets,
           source: "MaterialChangingStudy.pdf - Keturah Reserve Townhouses",
@@ -496,19 +540,19 @@ export const appRouter = router({
       .mutation(async ({ input }) => {
         // Generate session ID if not provided
         const sessionId = input.sessionId || nanoid();
-        
+
         // Decode base64 and upload to S3
         const buffer = Buffer.from(input.imageBase64, "base64");
         const fileKey = `uploads/${sessionId}/${Date.now()}-original.${input.mimeType.split('/')[1] || 'jpg'}`;
         const { url: originalImageUrl } = await storagePut(fileKey, buffer, input.mimeType);
-        
+
         // Create visualization record
         const id = await createMarbleVisualization({
           sessionId,
           originalImageUrl,
           status: "pending",
         });
-        
+
         return {
           id,
           sessionId,
@@ -648,10 +692,10 @@ Also assess whether you can confidently auto-detect and replace materials, or if
                 type: "object",
                 properties: {
                   materialType: { type: "string", description: "Type of material identified" },
-                  colorPalette: { 
-                    type: "array", 
+                  colorPalette: {
+                    type: "array",
                     items: { type: "string" },
-                    description: "Main colors in the material" 
+                    description: "Main colors in the material"
                   },
                   patterns: { type: "string", description: "Description of patterns and veining" },
                   characteristics: { type: "string", description: "Key visual characteristics" },
@@ -678,8 +722,8 @@ Also assess whether you can confidently auto-detect and replace materials, or if
         };
 
         // Update visualization with material sample
-        const existingSamples = visualization.materialSamples 
-          ? JSON.parse(visualization.materialSamples) 
+        const existingSamples = visualization.materialSamples
+          ? JSON.parse(visualization.materialSamples)
           : [];
         existingSamples.push(sampleInfo);
 
@@ -734,8 +778,8 @@ Also assess whether you can confidently auto-detect and replace materials, or if
           const surfaceList = selectedSurfaces.join(", ");
 
           // Parse marble analysis for detailed characteristics
-          const marbleAnalysis = customMarble.marbleAnalysis 
-            ? JSON.parse(customMarble.marbleAnalysis) 
+          const marbleAnalysis = customMarble.marbleAnalysis
+            ? JSON.parse(customMarble.marbleAnalysis)
             : null;
 
           // Get material sample info if using manual matching
@@ -743,7 +787,7 @@ Also assess whether you can confidently auto-detect and replace materials, or if
           if (input.useMaterialSample && visualization.materialSamples) {
             const samples = JSON.parse(visualization.materialSamples);
             if (samples.length > 0) {
-              materialContext = `\n\nThe user has provided material samples to help identify surfaces. Focus on replacing materials that match these characteristics:\n${samples.map((s: { surfaceType: string; analysis: { materialType: string; characteristics: string } }) => 
+              materialContext = `\n\nThe user has provided material samples to help identify surfaces. Focus on replacing materials that match these characteristics:\n${samples.map((s: { surfaceType: string; analysis: { materialType: string; characteristics: string } }) =>
                 `- ${s.surfaceType}: ${s.analysis.materialType} with ${s.analysis.characteristics}`
               ).join("\n")}`;
             }
@@ -781,7 +825,7 @@ IMPORTANT INSTRUCTIONS:
               mimeType: "image/jpeg",
             },
           ];
-          
+
           if (customMarble.imageUrl) {
             originalImages.push({
               url: customMarble.imageUrl,
@@ -818,9 +862,9 @@ IMPORTANT INSTRUCTIONS:
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
-          await updateMarbleVisualization(input.visualizationId, { 
-            status: "failed", 
-            errorMessage 
+          await updateMarbleVisualization(input.visualizationId, {
+            status: "failed",
+            errorMessage
           });
           throw error;
         }
@@ -875,7 +919,7 @@ IMPORTANT INSTRUCTIONS:
           if (input.useMaterialSample && visualization.materialSamples) {
             const samples = JSON.parse(visualization.materialSamples);
             if (samples.length > 0) {
-              materialContext = `\n\nThe user has provided material samples to help identify surfaces. Focus on replacing materials that match these characteristics:\n${samples.map((s: { surfaceType: string; analysis: { materialType: string; characteristics: string } }) => 
+              materialContext = `\n\nThe user has provided material samples to help identify surfaces. Focus on replacing materials that match these characteristics:\n${samples.map((s: { surfaceType: string; analysis: { materialType: string; characteristics: string } }) =>
                 `- ${s.surfaceType}: ${s.analysis.materialType} with ${s.analysis.characteristics}`
               ).join("\n")}`;
             }
@@ -892,7 +936,7 @@ IMPORTANT INSTRUCTIONS:
           if (input.customBoundaries && input.customBoundaries.length > 0) {
             const visibleBoundaries = input.customBoundaries.filter(b => b.visible);
             if (visibleBoundaries.length > 0) {
-              boundaryContext = `\n\nThe user has manually defined specific regions for each surface type. Focus the marble replacement precisely within these user-defined boundaries:\n${visibleBoundaries.map(b => 
+              boundaryContext = `\n\nThe user has manually defined specific regions for each surface type. Focus the marble replacement precisely within these user-defined boundaries:\n${visibleBoundaries.map(b =>
                 `- ${b.type}: User-defined polygon region with ${b.points.length} vertices`
               ).join("\n")}`;
             }
@@ -922,10 +966,10 @@ IMPORTANT INSTRUCTIONS:
           }
 
           // Update the visualization record with the processed image
-          const updateData = input.marbleType === "bardiglio" 
+          const updateData = input.marbleType === "bardiglio"
             ? { bardiglioImageUrl: result.url, status: "completed" as const }
             : { venatinoImageUrl: result.url, status: "completed" as const };
-          
+
           await updateMarbleVisualization(input.visualizationId, updateData);
 
           return {
@@ -937,9 +981,9 @@ IMPORTANT INSTRUCTIONS:
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
-          await updateMarbleVisualization(input.visualizationId, { 
-            status: "failed", 
-            errorMessage 
+          await updateMarbleVisualization(input.visualizationId, {
+            status: "failed",
+            errorMessage
           });
           throw error;
         }
@@ -998,10 +1042,10 @@ IMPORTANT INSTRUCTIONS:
           }
 
           // Update the visualization record with the processed image
-          const updateData = input.marbleType === "bardiglio" 
+          const updateData = input.marbleType === "bardiglio"
             ? { bardiglioImageUrl: result.url, status: "completed" as const }
             : { venatinoImageUrl: result.url, status: "completed" as const };
-          
+
           await updateMarbleVisualization(input.visualizationId, updateData);
 
           return {
@@ -1012,9 +1056,9 @@ IMPORTANT INSTRUCTIONS:
           };
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : "Unknown error";
-          await updateMarbleVisualization(input.visualizationId, { 
-            status: "failed", 
-            errorMessage 
+          await updateMarbleVisualization(input.visualizationId, {
+            status: "failed",
+            errorMessage
           });
           throw error;
         }

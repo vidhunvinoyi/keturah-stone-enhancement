@@ -53,7 +53,7 @@ export const marbleVisualizations = mysqlTable("marble_visualizations", {
   /** JSON string containing selected surfaces for transformation (walls, floors, ceilings) */
   selectedSurfaces: text("selectedSurfaces"),
   /** ID of the custom marble used for transformation (if any) */
-  customMarbleId: int("customMarbleId"),
+  customMarbleId: int("customMarbleId").references(() => customMarbles.id, { onDelete: 'set null' }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -67,7 +67,7 @@ export type InsertMarbleVisualization = typeof marbleVisualizations.$inferInsert
 export const customMarbles = mysqlTable("custom_marbles", {
   id: int("id").autoincrement().primaryKey(),
   /** Session ID or user ID who created this marble */
-  ownerId: varchar("ownerId", { length: 128 }).notNull(),
+  ownerId: varchar("ownerId", { length: 128 }).notNull(), // Note: We can't strictly FK to users.openId if it's a mix of sessionIds and openIds, but if it's strictly Auth users, we should. For now, leaving as loose ref to avoid breaking anonymous functionality if it exists.
   /** Name of the marble (e.g., "Carrara", "Calacatta Gold") */
   name: varchar("name", { length: 255 }).notNull(),
   /** Origin/quarry location (e.g., "Carrara, Italy") */
