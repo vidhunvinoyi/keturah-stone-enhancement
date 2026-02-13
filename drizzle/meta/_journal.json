@@ -36,6 +36,13 @@
       "when": 1769770734755,
       "tag": "0004_overrated_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1770986026505,
+      "tag": "0005_wealthy_inhumans",
+      "breakpoints": true
     }
   ]
 }

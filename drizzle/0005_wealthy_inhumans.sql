@@ -1,0 +1,1 @@
+ALTER TABLE `marble_visualizations` ADD CONSTRAINT `marble_visualizations_customMarbleId_custom_marbles_id_fk` FOREIGN KEY (`customMarbleId`) REFERENCES `custom_marbles`(`id`) ON DELETE set null ON UPDATE no action;
